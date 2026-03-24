@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module 1: Your Cloud Bill is on Fire — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">Module 1 of 2</span>
+</nav>
+
+<main class="training-page">
+
+  <!-- Progress -->
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <!-- Step container -->
+  <div id="step-container"></div>
+
+</main>
+
+<script>
+/* ─── State ─── */
+let currentStep = 0;
+let score = 0;
+let answered = false;
+
+/* ─── Steps definition ─── */
+const steps = [
+
+  /* ── Step 0: Intro ── */
+  {
+    type: 'intro',
+    render() {
+      return `
+        <div class="step-card">
+          <div class="step-type scenario">🔥 Scenario Training</div>
+          <h2>Your Cloud Bill is on Fire</h2>
+          <p style="color:var(--text-muted);margin-bottom:16px">
+            You just joined a 20-person startup as a senior developer. On your first week,
+            you peek at the AWS bill: <strong style="color:var(--accent)">$34,000/month</strong>.
+            Engineering leadership thought it was around $12,000.
+          </p>
+          <div class="scenario-box">
+            <div class="scenario-icon">😱</div>
+            <strong>Your mission:</strong> Work through 4 real-world situations to uncover where
+            the money is going — and learn how to stop the bleeding.
+            Each right answer earns points.
+          </div>
+          <div class="tip-card">
+            💡 <strong>Did you know?</strong> The average company wastes <strong>32% of its cloud spend</strong>.
+            For a $34K/month bill, that's <strong>~$10,880 thrown away every month</strong>.
+          </div>
+          <div class="step-actions">
+            <span></span>
+            <button class="btn btn-primary" onclick="nextStep()">Let's go 🚀</button>
+          </div>
+        </div>
+      `;
+    }
+  },
+
+  /* ── Step 1: Zombie resources quiz ── */
+  {
+    type: 'quiz',
+    points: 40,
+    question: 'You run a script and find 12 EC2 instances tagged "test" or "temp" that have been running for over 90 days. Nobody knows who created them. What is the BEST first action?',
+    options: [
+      { text: 'Delete them immediately — they\'re clearly abandoned.', correct: false },
+      { text: 'Send a company-wide Slack message asking who owns them, then delete after 48h with no reply.', correct: true },
+      { text: 'Leave them alone — deleting might break something in production.', correct: false },
+      { text: 'Move them to a cheaper instance type and keep them running.', correct: false },
+    ],
+    feedback: {
+      correct: '🎯 Exactly right! Immediately deleting risks breaking something. But doing nothing costs money. The golden rule: <strong>notify first, delete with a deadline</strong>. 48h grace period + Slack message is a common best practice. Bonus: set up a Lambda that auto-tags resources with owner + date on creation.',
+      wrong: '❌ Close, but not quite. Deleting immediately is risky (could break something). Leaving them wastes money. The right move: <strong>notify the team, then delete after a deadline</strong>. Always establish ownership before deleting cloud resources.'
+    }
+  },
+
+  /* ── Step 2: Tagging scenario ── */
+  {
+    type: 'decision',
+    points: 30,
+    title: 'The Tagging Disaster',
+    scenario: 'Your Finance team asks: "Can you break down our AWS costs by product team?" You check the AWS Cost Explorer — <strong>only 18% of your resources have any tags</strong>. The other 82% are a black box.',
+    choices: [
+      { label: '😤 Tell Finance it\'s impossible for now', outcome: 'bad',   text: '🔴 This leads to a growing distrust between Engineering and Finance — and you\'ll have this same conversation forever. With no visibility, you can\'t optimize what you can\'t measure.' },
+      { label: '🏷️ Start a tagging enforcement policy this sprint', outcome: 'good',  text: '🟢 Great call! Enforce tags at the IaC level (Terraform/CDK), use AWS Config rules to flag untagged resources, and set up Cost Allocation Tags in the Billing console. You\'ll have full visibility within weeks.' },
+      { label: '🤷 Manually tag what you can find this week', outcome: 'ok',   text: '🟡 Better than nothing, but it won\'t scale. Manual tagging is error-prone and time-consuming. The real fix: enforce tags in your IaC pipelines so every new resource is tagged on creation.' },
+    ]
+  },
+
+  /* ── Step 3: Budget alerts quiz ── */
+  {
+    type: 'quiz',
+    points: 40,
+    question: 'Your company has no budget alerts set up. The bill has been silently growing 15% month-over-month. Which combination of alerts should you set up FIRST?',
+    options: [
+      { text: 'A single alert when you exceed the monthly budget.', correct: false },
+      { text: 'Alerts at 50%, 80%, and 100% of monthly budget + anomaly detection alerts.', correct: true },
+      { text: 'A daily cost report emailed to the CTO.', correct: false },
+      { text: 'Alerts only for production environments — dev is too unpredictable.', correct: false },
+    ],
+    feedback: {
+      correct: '🎯 Perfect! <strong>Multi-threshold alerts</strong> (50%/80%/100%) give you early warning while there\'s still time to act. <strong>Anomaly detection</strong> is critical — it catches sudden spikes (e.g., a runaway Lambda or an accidental data egress). Never wait until you\'ve blown the budget.',
+      wrong: '❌ A single 100% alert is too late — you\'ve already overspent. Daily reports go unread. The right setup: <strong>threshold alerts at 50/80/100% + anomaly detection</strong>. AWS Budgets + Cost Anomaly Detection together take ~15 minutes to set up.'
+    }
+  },
+
+  /* ── Step 4: Cost calculator challenge ── */
+  {
+    type: 'calculator',
+    points: 40,
+    title: 'The Dev Environment Heist',
+    render() {
+      return `
+        <div class="step-card">
+          <div class="step-type challenge">⚡ Challenge</div>
+          <h2>The Dev Environment Heist</h2>
+          <p style="color:var(--text-muted);margin-bottom:16px">
+            Your team has 8 developers, each with a dedicated dev EC2 instance (m5.xlarge, $0.192/hr).
+            They run <strong>24/7 — including nights and weekends</strong>.
+            Use the calculator below to discover how much you're wasting.
+          </p>
+
+          <div class="cost-calc">
+            <h4>💰 Dev Environment Cost Calculator</h4>
+            <div class="slider-group">
+              <div class="slider-label">
+                <span>Hours used per day per dev</span>
+                <span id="hours-val">8h / day</span>
+              </div>
+              <input type="range" min="4" max="24" value="8" id="hours-slider" oninput="updateCalc()" />
+            </div>
+            <div class="calc-row">
+              <span class="label">Instance type</span>
+              <span class="value">m5.xlarge ($0.192/hr)</span>
+            </div>
+            <div class="calc-row">
+              <span class="label">Number of devs</span>
+              <span class="value">8</span>
+            </div>
+            <div class="calc-row">
+              <span class="label">Current cost (24/7)</span>
+              <span class="value red" id="current-cost">$884/mo</span>
+            </div>
+            <div class="calc-row">
+              <span class="label">Cost with scheduled shutdown</span>
+              <span class="value green" id="optimized-cost">$369/mo</span>
+            </div>
+            <div class="calc-row">
+              <span class="label">💸 Monthly savings</span>
+              <span class="value yellow" id="savings">$515/mo ($6,180/yr)</span>
+            </div>
+          </div>
+
+          <div class="tip-card">
+            <strong>🔧 How to do it:</strong>
+            <ul>
+              <li>Use <strong>AWS Instance Scheduler</strong> or Lambda + EventBridge to auto-stop instances</li>
+              <li>Set a shutdown at 8pm, restart at 8am on weekdays only</li>
+              <li>Devs can manually start their instance when needed via AWS console or CLI alias</li>
+              <li>Same principle applies to <strong>RDS databases</strong> — huge savings possible</li>
+            </ul>
+          </div>
+
+          <div class="step-actions">
+            <a href="index.html" class="btn btn-ghost">← Back to hub</a>
+            <button class="btn btn-primary" onclick="showResults()">See my results 🏆</button>
+          </div>
+        </div>
+      `;
+    }
+  },
+
+  /* ── Step 5: Results ── */
+  {
+    type: 'results'
+  }
+];
+
+/* ─── Update calculator ─── */
+function updateCalc() {
+  const hours = parseInt(document.getElementById('hours-slider').value);
+  document.getElementById('hours-val').textContent = hours + 'h / day';
+
+  const hourlyRate = 0.192;
+  const devs = 8;
+  const daysPerMonth = 30;
+
+  const currentCost = Math.round(hourlyRate * devs * 24 * daysPerMonth);
+  const optimizedCost = Math.round(hourlyRate * devs * hours * daysPerMonth * (5/7)); // weekdays only
+  const savings = currentCost - optimizedCost;
+
+  document.getElementById('current-cost').textContent = '$' + currentCost.toLocaleString() + '/mo';
+  document.getElementById('optimized-cost').textContent = '$' + optimizedCost.toLocaleString() + '/mo';
+  document.getElementById('savings').textContent = '$' + savings.toLocaleString() + '/mo ($' + (savings * 12).toLocaleString() + '/yr)';
+}
+
+/* ─── Answer quiz ─── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+
+  const options = document.querySelectorAll('.option');
+  const feedback = document.getElementById('feedback-box');
+  const nextBtn = document.getElementById('next-btn');
+
+  const selected = stepData.options[optionIndex];
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong');
+  options[optionIndex].classList.add('selected');
+
+  // Mark the correct answer if wrong was selected
+  if (!selected.correct) {
+    stepData.options.forEach((opt, i) => {
+      if (opt.correct) options[i].classList.add('correct');
+    });
+  }
+
+  options.forEach(o => o.classList.add('disabled'));
+
+  if (selected.correct) {
+    score += stepData.points;
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = `<div class="feedback-title">✅ Correct! +${stepData.points} pts</div>${stepData.feedback.correct}`;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = `<div class="feedback-title">❌ Not quite!</div>${stepData.feedback.wrong}`;
+  }
+
+  updateScoreDisplay();
+  nextBtn.disabled = false;
+}
+
+/* ─── Decision choice ─── */
+function makeDecision(outcomeClass, points) {
+  if (answered) return;
+  answered = true;
+
+  document.querySelectorAll('.decision-btn').forEach(b => b.disabled = true);
+
+  const consequenceEl = document.getElementById('consequence-' + outcomeClass);
+  consequenceEl.classList.add('show');
+
+  if (outcomeClass === 'good') {
+    score += points;
+    updateScoreDisplay();
+  } else if (outcomeClass === 'ok') {
+    score += Math.floor(points / 2);
+    updateScoreDisplay();
+  }
+
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Score display ─── */
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+/* ─── Navigate ─── */
+function nextStep() {
+  currentStep++;
+  renderStep();
+}
+
+function showResults() {
+  currentStep = steps.length - 1;
+  renderStep();
+}
+
+function renderStep() {
+  answered = false;
+
+  const total = steps.length - 1; // exclude results step from count
+  const progress = Math.round((currentStep / total) * 100);
+  document.getElementById('progress-bar').style.width = progress + '%';
+
+  const displayStep = Math.min(currentStep + 1, total);
+  document.getElementById('step-label').textContent = `Step ${displayStep} of ${total}`;
+
+  const step = steps[currentStep];
+  const container = document.getElementById('step-container');
+
+  if (step.type === 'intro') {
+    container.innerHTML = step.render();
+
+  } else if (step.type === 'quiz') {
+    const letters = ['A', 'B', 'C', 'D'];
+    const optionsHTML = step.options.map((opt, i) => `
+      <div class="option" onclick="answerQuiz(${i}, steps[${currentStep}])">
+        <div class="option-letter">${letters[i]}</div>
+        <div class="option-text">${opt.text}</div>
+      </div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${optionsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select the best answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'decision') {
+    const choicesHTML = step.choices.map(c => `
+      <button class="decision-btn" onclick="makeDecision('${c.outcome}', ${step.points})">
+        ${c.label}
+      </button>
+      <div class="consequence ${c.outcome}" id="consequence-${c.outcome}">
+        ${c.text}
+      </div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Scenario — up to ${step.points} pts</div>
+        <h2>${step.title}</h2>
+        <div class="scenario-box">${step.scenario}</div>
+        <p style="margin:16px 0 8px;font-weight:600">What do you do?</p>
+        ${choicesHTML}
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Choose your action</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'calculator') {
+    container.innerHTML = step.render();
+    updateCalc();
+
+  } else if (step.type === 'results') {
+    const maxScore = 150;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+
+    if (pct >= 85) {
+      badge = '🏆'; headline = 'FinOps Champion!'; desc = 'Outstanding! You\'ve got a solid grasp of cloud cost hygiene. Your cloud bill thanks you.';
+    } else if (pct >= 60) {
+      badge = '🎯'; headline = 'Good instincts!'; desc = 'You\'re on the right track. Review the tips above and you\'ll be cutting waste in no time.';
+    } else {
+      badge = '📚'; headline = 'Time to level up!'; desc = 'Cloud costs are tricky. Re-read the feedback and try Module 2 to sharpen your FinOps skills.';
+    }
+
+    container.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Enforce resource tagging in IaC pipelines — never rely on manual tagging</li>
+            <li>Use multi-threshold budget alerts (50/80/100%) + anomaly detection</li>
+            <li>Audit "zombie" resources monthly — add an owner tag + creation date on all resources</li>
+            <li>Schedule dev/staging environment shutdowns — nights + weekends = massive savings</li>
+            <li>What you can't measure, you can't optimize. Cost visibility = Cost control.</li>
+          </ul>
+        </div>
+
+        <div class="results-actions">
+          <a href="module2.html" class="btn btn-primary">Next module ⚖️ →</a>
+          <a href="index.html" class="btn btn-ghost">← Back to hub</a>
+        </div>
+      </div>
+    `;
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+  }
+}
+
+/* ─── Init ─── */
+renderStep();
+</script>
+
+</body>
+</html>

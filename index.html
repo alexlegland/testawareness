@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinOps Academy — Cloud Cost Training</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .modules-section-title {
+      text-align: center;
+      padding: 0 20px 28px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+    }
+    .footer {
+      text-align: center;
+      padding: 32px 20px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+    .progress-overview {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+      padding: 0 20px;
+    }
+    .progress-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .progress-pill .pill-icon { font-size: 1.2rem; }
+    .progress-pill .pill-text { color: var(--text-muted); }
+    .progress-pill .pill-text strong { color: var(--text); display: block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">Beta</span>
+</nav>
+
+<main>
+  <section class="hero">
+    <div class="hero-tag">Cloud Cost Awareness Training</div>
+    <h1>Stop burning money<br>on <span class="highlight">cloud waste</span></h1>
+    <p>Short, fun, and interactive FinOps training for developers, CTOs, and DevOps engineers. Learn to identify and fix cloud cost issues — in under 10 minutes.</p>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-value">32%</div>
+        <div class="stat-label">Cloud spend wasted on average</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">$147B</div>
+        <div class="stat-label">Global cloud waste in 2025</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">~5 min</div>
+        <div class="stat-label">Per training module</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="progress-overview">
+    <div class="progress-pill">
+      <span class="pill-icon">🎯</span>
+      <span class="pill-text"><strong>2 modules</strong>available today</span>
+    </div>
+    <div class="progress-pill">
+      <span class="pill-icon">⚡</span>
+      <span class="pill-text"><strong>Scenario-based</strong>real-world situations</span>
+    </div>
+    <div class="progress-pill">
+      <span class="pill-icon">🏆</span>
+      <span class="pill-text"><strong>XP points</strong>track your progress</span>
+    </div>
+  </div>
+
+  <p class="modules-section-title">Choose a training module</p>
+
+  <div class="modules-grid">
+
+    <!-- Module 1 -->
+    <a class="module-card m1" href="module1.html">
+      <div class="module-card-header">
+        <div class="module-emoji">🔥</div>
+        <div class="module-meta">
+          <span class="difficulty beginner">Beginner</span>
+          <span class="module-duration">⏱ ~5 min</span>
+        </div>
+      </div>
+      <h2>Your Cloud Bill is on Fire</h2>
+      <p>Learn to spot the most common and costly cloud mistakes before they incinerate your budget.</p>
+      <div class="module-topics">
+        <span class="topic-tag">Cost visibility</span>
+        <span class="topic-tag">Tagging</span>
+        <span class="topic-tag">Zombie resources</span>
+        <span class="topic-tag">Alerts</span>
+      </div>
+      <div class="module-cta">
+        <span class="btn-start">Start training →</span>
+        <span class="module-xp">🏆 +150 XP</span>
+      </div>
+    </a>
+
+    <!-- Module 2 -->
+    <a class="module-card m2" href="module2.html">
+      <div class="module-card-header">
+        <div class="module-emoji">⚖️</div>
+        <div class="module-meta">
+          <span class="difficulty intermediate">Intermediate</span>
+          <span class="module-duration">⏱ ~6 min</span>
+        </div>
+      </div>
+      <h2>Right-Size or Pay the Price</h2>
+      <p>Make the right infrastructure choices. Reserved? On-demand? Spot? Stop over-provisioning.</p>
+      <div class="module-topics">
+        <span class="topic-tag">Right-sizing</span>
+        <span class="topic-tag">Reserved instances</span>
+        <span class="topic-tag">Spot instances</span>
+        <span class="topic-tag">Auto-scaling</span>
+      </div>
+      <div class="module-cta">
+        <span class="btn-start">Start training →</span>
+        <span class="module-xp">🏆 +200 XP</span>
+      </div>
+    </a>
+
+  </div>
+</main>
+
+<footer class="footer">
+  Built for dev, CTO &amp; DevOps teams who'd rather spend on features than wasted compute.<br>
+  Inspired by security awareness training — but for your cloud bill. 💸
+</footer>
+
+</body>
+</html>
