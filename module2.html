@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module 2: Right-Size or Pay the Price — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .instance-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .instance-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+      font-size: 0.88rem;
+    }
+    .instance-card:hover:not(.disabled) {
+      border-color: var(--primary);
+      background: rgba(108,71,255,0.08);
+    }
+    .instance-card.selected { border-color: var(--primary); background: rgba(108,71,255,0.12); }
+    .instance-card.correct  { border-color: var(--success); background: rgba(34,197,94,0.1); }
+    .instance-card.wrong    { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+    .instance-card.disabled { cursor: default; }
+    .instance-name { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+    .instance-price { font-size: 1.2rem; font-weight: 800; color: var(--accent); }
+    .instance-price small { font-size: 0.7rem; color: var(--text-muted); font-weight: 400; }
+    .instance-specs { color: var(--text-muted); font-size: 0.78rem; margin-top: 6px; line-height: 1.4; }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 16px 0;
+    }
+    .comparison-table th {
+      text-align: left;
+      padding: 10px 14px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    .comparison-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .comparison-table tr:last-child td { border-bottom: none; }
+    .comparison-table td:first-child { color: var(--text-muted); }
+    .comparison-table td.highlight { color: var(--success); font-weight: 600; }
+    .comparison-table td.dim { color: var(--danger); }
+
+    .cpu-meter {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+    .cpu-label { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 8px; }
+    .cpu-bar-wrap { background: var(--border); border-radius: 99px; height: 18px; overflow: hidden; position: relative; }
+    .cpu-bar-fill { height: 100%; border-radius: 99px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 0.7rem; font-weight: 700; color: white; transition: width 0.5s; }
+    .cpu-bar-fill.waste { background: var(--danger); }
+    .cpu-bar-fill.ok { background: var(--success); }
+    .cpu-bar-fill.high { background: var(--warning); }
+
+    .quiz-multi {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .spot-scenario {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin: 16px 0;
+    }
+    .spot-scenario h4 { font-size: 0.9rem; font-weight: 700; margin-bottom: 8px; }
+    .spot-scenario p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+    .spot-label { display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; margin-bottom: 8px; }
+    .spot-label.good { background: rgba(34,197,94,0.15); color: var(--success); }
+    .spot-label.bad  { background: rgba(239,68,68,0.15);  color: var(--danger);  }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">Module 2 of 2</span>
+</nav>
+
+<main class="training-page">
+
+  <!-- Progress -->
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <div id="step-container"></div>
+
+</main>
+
+<script>
+let currentStep = 0;
+let score = 0;
+let answered = false;
+
+const steps = [
+
+  /* ── Step 0: Intro ── */
+  {
+    type: 'intro',
+    render() {
+      return `
+        <div class="step-card">
+          <div class="step-type scenario">⚖️ Scenario Training</div>
+          <h2>Right-Size or Pay the Price</h2>
+          <p style="color:var(--text-muted);margin-bottom:16px">
+            Over-provisioning is the #1 cloud waste culprit. Teams pick "safe" large instances
+            and never look back. Meanwhile, money silently drains away.
+          </p>
+          <div class="scenario-box">
+            <div class="scenario-icon">🧑‍💼</div>
+            <strong>Your role:</strong> You're a DevOps lead. Your CTO just discovered you're spending
+            <strong>$80K/month on compute</strong> but your monitoring shows average CPU utilization
+            across your fleet is just <strong>12%</strong>. Time to right-size.
+          </div>
+          <div class="tip-card">
+            💡 <strong>The golden rule:</strong> Target <strong>60–80% average CPU utilization</strong>.
+            Below 30% consistently = you're over-provisioned. Above 80% consistently = you need to scale.
+          </div>
+          <div class="step-actions">
+            <span></span>
+            <button class="btn btn-primary" onclick="nextStep()">Let's fix this 💪</button>
+          </div>
+        </div>
+      `;
+    }
+  },
+
+  /* ── Step 1: Pick the right instance ── */
+  {
+    type: 'instance-picker',
+    points: 50,
+    title: 'Pick the Right Instance',
+    scenario: 'Your team runs a <strong>nightly batch job</strong>: it processes 2M records, takes ~3 hours, uses high CPU but needs only 4 GB RAM. It runs once per night at 2am. Which instance type is the best choice?',
+    correctIndex: 2,
+    instances: [
+      { name: 'm5.2xlarge', price: '$0.384', unit: '/hr', specs: '8 vCPU · 32 GB RAM\nGeneral purpose' },
+      { name: 'r5.xlarge',  price: '$0.252', unit: '/hr', specs: '4 vCPU · 32 GB RAM\nMemory optimized' },
+      { name: 'c5.xlarge',  price: '$0.170', unit: '/hr', specs: '4 vCPU · 8 GB RAM\nCompute optimized ✓' },
+      { name: 't3.large',   price: '$0.083', unit: '/hr', specs: '2 vCPU · 8 GB RAM\nBurstable (limited CPU)' },
+    ],
+    feedback: {
+      correct: '🎯 Spot on! A <strong>compute-optimized (c5) instance</strong> is perfect for CPU-heavy batch jobs. You get the CPU you need without paying for excess RAM (r5) or compute (m5). At $0.17/hr × 3h × 30 days = <strong>$15/month vs $34/month for m5</strong>. That\'s 56% savings.',
+      wrong: '❌ Not the best fit. For CPU-intensive work with low RAM needs: <strong>use compute-optimized (c5/c6i) instances</strong>. Memory-optimized (r5) wastes RAM budget. t3 instances have burstable CPU that throttles under sustained load — bad for 3-hour jobs. m5 is "all-rounder" but costs more than necessary.'
+    }
+  },
+
+  /* ── Step 2: Reserved vs On-demand quiz ── */
+  {
+    type: 'quiz',
+    points: 40,
+    question: 'Your production database (RDS PostgreSQL) has been running 24/7 for 2 years with no sign of stopping. You\'re paying full On-Demand pricing. What should you do?',
+    options: [
+      { text: 'Keep On-Demand — Reserved Instances are too complex to manage.', correct: false },
+      { text: 'Buy 1-year Reserved Instances for the database — save ~40% with no commitment risk.', correct: true },
+      { text: 'Use Spot Instances for the database — cheapest option available.', correct: false },
+      { text: 'Move to a Serverless DB — always cheaper than provisioned.', correct: false },
+    ],
+    feedback: {
+      correct: '🎯 Correct! For stable, predictable workloads running 24/7, <strong>Reserved Instances (1-year, no upfront)</strong> save ~40%. On a $500/mo RDS instance, that\'s $2,400/year saved. Spot Instances are terminated when AWS needs capacity — <strong>never use them for databases</strong>. Serverless DB has per-query costs that often exceed provisioned at high utilization.',
+      wrong: '❌ For a 24/7 stable workload, On-Demand is the most expensive option. <strong>Reserved Instances</strong> save 40% for 1-year, 60% for 3-year. Spot Instances are NOT suitable for databases — they can be terminated with 2 minutes notice. Serverless RDS is only cost-effective at very low utilization or unpredictable traffic.'
+    }
+  },
+
+  /* ── Step 3: CPU utilization — right-sizing decision ── */
+  {
+    type: 'rightsizing',
+    points: 50,
+    title: 'The Over-Provisioned Fleet',
+    render() {
+      return `
+        <div class="step-card">
+          <div class="step-type challenge">🔍 Right-Sizing Challenge — 50 pts</div>
+          <h2>The Over-Provisioned Fleet</h2>
+          <p style="color:var(--text-muted);margin-bottom:16px">
+            You have 5 application servers (m5.2xlarge, $0.384/hr each). CloudWatch shows their
+            average CPU over the last 30 days:
+          </p>
+
+          <div class="cpu-meter">
+            <div class="cpu-label">app-server-01 — avg CPU: <strong>8%</strong></div>
+            <div class="cpu-bar-wrap"><div class="cpu-bar-fill waste" style="width:8%">8%</div></div>
+          </div>
+          <div class="cpu-meter">
+            <div class="cpu-label">app-server-02 — avg CPU: <strong>11%</strong></div>
+            <div class="cpu-bar-wrap"><div class="cpu-bar-fill waste" style="width:11%">11%</div></div>
+          </div>
+          <div class="cpu-meter">
+            <div class="cpu-label">app-server-03 — avg CPU: <strong>9%</strong></div>
+            <div class="cpu-bar-wrap"><div class="cpu-bar-fill waste" style="width:9%">9%</div></div>
+          </div>
+          <div class="cpu-meter">
+            <div class="cpu-label">app-server-04 — avg CPU: <strong>72%</strong></div>
+            <div class="cpu-bar-wrap"><div class="cpu-bar-fill high" style="width:72%">72%</div></div>
+          </div>
+          <div class="cpu-meter">
+            <div class="cpu-label">app-server-05 — avg CPU: <strong>67%</strong></div>
+            <div class="cpu-bar-wrap"><div class="cpu-bar-fill ok" style="width:67%">67%</div></div>
+          </div>
+
+          <p style="margin-top:20px;font-weight:600">What's the best action for servers 01, 02, and 03?</p>
+          <div id="rightsizing-choices">
+            <button class="decision-btn" onclick="rsChoice('consolidate')">
+              🗜️ Consolidate: replace 01, 02, 03 with a single m5.large — same workload, ¼ the cost
+            </button>
+            <button class="decision-btn" onclick="rsChoice('downsize')">
+              📉 Downsize each to t3.medium — cheaper instance type for low CPU
+            </button>
+            <button class="decision-btn" onclick="rsChoice('nothing')">
+              🙈 Leave them — high CPU might spike at any moment
+            </button>
+          </div>
+
+          <div class="consequence good" id="rs-consolidate">
+            🟢 <strong>Excellent!</strong> Three m5.2xlarge at 8-11% CPU can easily be consolidated.
+            One m5.large ($0.096/hr) can handle their combined ~28% load.
+            <strong>Savings: ($0.384×3 − $0.096) × 730h = $769/month</strong>.
+            Add Auto Scaling so you can grow when actually needed.
+          </div>
+          <div class="consequence ok" id="rs-downsize">
+            🟡 <strong>Partial credit.</strong> Downsizing is better than nothing, but consolidation gets you
+            more savings. t3.medium has burstable CPU which can throttle. A better move:
+            consolidate onto one properly-sized instance with Auto Scaling.
+          </div>
+          <div class="consequence bad" id="rs-nothing">
+            🔴 <strong>Costly mistake!</strong> "It might spike" is the #1 excuse for over-provisioning.
+            Use <strong>Auto Scaling</strong> to handle spikes dynamically. Paying for idle capacity 24/7
+            is never the right answer.
+          </div>
+
+          <div class="step-actions">
+            <span style="font-size:0.8rem;color:var(--text-muted)">Choose your action</span>
+            <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+          </div>
+        </div>
+      `;
+    }
+  },
+
+  /* ── Step 4: Spot Instances quiz ── */
+  {
+    type: 'spot-quiz',
+    points: 40,
+    title: 'Spot or Not?',
+    render() {
+      return `
+        <div class="step-card">
+          <div class="step-type quiz">⚡ Quiz — 40 pts</div>
+          <h2>Spot or Not?</h2>
+          <p style="color:var(--text-muted);margin-bottom:16px">
+            Spot Instances can be <strong>up to 90% cheaper</strong> than On-Demand — but they can be
+            interrupted with 2 minutes' notice. For each workload, decide: Spot or Not?
+          </p>
+
+          <div class="spot-scenario">
+            <span class="spot-label good">✓ Great for Spot</span>
+            <h4>ML Training Job</h4>
+            <p>GPU-heavy training run that takes 6 hours. Checkpointed every 30 minutes. Not time-sensitive.</p>
+          </div>
+
+          <div class="spot-scenario">
+            <span class="spot-label bad">✗ Never use Spot</span>
+            <h4>Production PostgreSQL Database</h4>
+            <p>Your main transactional database. Must be always available. Downtime = customer impact.</p>
+          </div>
+
+          <div class="spot-scenario">
+            <span class="spot-label good">✓ Great for Spot</span>
+            <h4>CI/CD Build Workers</h4>
+            <p>GitHub Actions self-hosted runners that compile code and run tests. Ephemeral by nature.</p>
+          </div>
+
+          <p style="margin-top:20px;font-weight:600">Now tell me: which is the WRONG use of Spot Instances?</p>
+          <div class="quiz-multi">Select the best answer</div>
+
+          <div class="options" id="spot-options">
+            <div class="option" onclick="spotAnswer(0)">
+              <div class="option-letter">A</div>
+              <div class="option-text">Video transcoding pipeline that queues and retries failed jobs automatically</div>
+            </div>
+            <div class="option" onclick="spotAnswer(1)">
+              <div class="option-letter">B</div>
+              <div class="option-text">Stateless web application behind a load balancer with multiple instances</div>
+            </div>
+            <div class="option" onclick="spotAnswer(2)">
+              <div class="option-letter">C</div>
+              <div class="option-text">Single-node Redis cache that holds session data for your entire user base</div>
+            </div>
+            <div class="option" onclick="spotAnswer(3)">
+              <div class="option-letter">D</div>
+              <div class="option-text">Batch ETL data processing with idempotent jobs that can be safely retried</div>
+            </div>
+          </div>
+
+          <div class="feedback" id="feedback-box"></div>
+
+          <div class="step-actions">
+            <span style="font-size:0.8rem;color:var(--text-muted)">Select the wrong use of Spot</span>
+            <button class="btn btn-primary" id="next-btn" onclick="showResults()" disabled>See results 🏆</button>
+          </div>
+        </div>
+      `;
+    }
+  },
+
+  /* ── Step 5: Results ── */
+  { type: 'results' }
+];
+
+/* ─── Right-sizing choice handler ─── */
+function rsChoice(choice) {
+  if (answered) return;
+  answered = true;
+
+  document.querySelectorAll('.decision-btn').forEach(b => b.disabled = true);
+
+  document.getElementById('rs-' + choice).classList.add('show');
+
+  if (choice === 'consolidate') score += 50;
+  else if (choice === 'downsize') score += 25;
+
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Spot quiz handler ─── */
+function spotAnswer(idx) {
+  if (answered) return;
+  answered = true;
+
+  const options = document.querySelectorAll('#spot-options .option');
+  options.forEach(o => o.classList.add('disabled'));
+
+  const correctIdx = 2; // Redis cache = wrong use
+  options[idx].classList.add(idx === correctIdx ? 'correct' : 'wrong');
+  if (idx !== correctIdx) options[correctIdx].classList.add('correct');
+
+  const feedback = document.getElementById('feedback-box');
+  if (idx === correctIdx) {
+    score += 40;
+    updateScoreDisplay();
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = `<div class="feedback-title">✅ Correct! +40 pts</div>
+      A <strong>single-node Redis cache holding session data</strong> is the worst candidate for Spot Instances.
+      If it's interrupted, every user loses their session — instant production incident.
+      Spot is perfect for <strong>fault-tolerant, stateless, or checkpointed workloads</strong>.
+      Rule of thumb: if interruption = user impact, don't use Spot.`;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = `<div class="feedback-title">❌ Not quite!</div>
+      The worst Spot candidate is the <strong>single-node Redis cache</strong> (C).
+      If interrupted, all sessions are lost — instant outage.
+      Stateless apps (B), retry-able pipelines (A), and idempotent batch jobs (D) are all great Spot candidates.
+      Spot works when <strong>interruption doesn't cause data loss or user-facing downtime</strong>.`;
+  }
+
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Instance picker ─── */
+function pickInstance(idx, step) {
+  if (answered) return;
+  answered = true;
+
+  const cards = document.querySelectorAll('.instance-card');
+  cards.forEach(c => c.classList.add('disabled'));
+  cards[idx].classList.add(idx === step.correctIndex ? 'correct' : 'wrong');
+  if (idx !== step.correctIndex) cards[step.correctIndex].classList.add('correct');
+
+  const feedback = document.getElementById('feedback-box');
+  if (idx === step.correctIndex) {
+    score += step.points;
+    updateScoreDisplay();
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = `<div class="feedback-title">✅ Correct! +${step.points} pts</div>${step.feedback.correct}`;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = `<div class="feedback-title">❌ Not quite!</div>${step.feedback.wrong}`;
+  }
+
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Quiz handler ─── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+
+  const options = document.querySelectorAll('.option');
+  const feedback = document.getElementById('feedback-box');
+
+  const selected = stepData.options[optionIndex];
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong');
+  if (!selected.correct) {
+    stepData.options.forEach((opt, i) => { if (opt.correct) options[i].classList.add('correct'); });
+  }
+  options.forEach(o => o.classList.add('disabled'));
+
+  if (selected.correct) {
+    score += stepData.points;
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = `<div class="feedback-title">✅ Correct! +${stepData.points} pts</div>${stepData.feedback.correct}`;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = `<div class="feedback-title">❌ Not quite!</div>${stepData.feedback.wrong}`;
+  }
+
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Score / nav ─── */
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() {
+  currentStep++;
+  renderStep();
+}
+
+function showResults() {
+  currentStep = steps.length - 1;
+  renderStep();
+}
+
+function renderStep() {
+  answered = false;
+  const total = steps.length - 1;
+  const progress = Math.round((currentStep / total) * 100);
+  document.getElementById('progress-bar').style.width = progress + '%';
+  const displayStep = Math.min(currentStep + 1, total);
+  document.getElementById('step-label').textContent = `Step ${displayStep} of ${total}`;
+
+  const step = steps[currentStep];
+  const container = document.getElementById('step-container');
+
+  if (step.type === 'intro') {
+    container.innerHTML = step.render();
+
+  } else if (step.type === 'instance-picker') {
+    const cardsHTML = step.instances.map((inst, i) => `
+      <div class="instance-card" onclick="pickInstance(${i}, steps[${currentStep}])">
+        <div class="instance-name">${inst.name}</div>
+        <div class="instance-price">${inst.price}<small>${inst.unit}</small></div>
+        <div class="instance-specs">${inst.specs.replace('\n', '<br>')}</div>
+      </div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🖥️ Instance Picker — ${step.points} pts</div>
+        <h2>${step.title}</h2>
+        <div class="scenario-box">${step.scenario}</div>
+        <div class="instance-picker">${cardsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Click the best instance type</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'quiz') {
+    const letters = ['A', 'B', 'C', 'D'];
+    const optionsHTML = step.options.map((opt, i) => `
+      <div class="option" onclick="answerQuiz(${i}, steps[${currentStep}])">
+        <div class="option-letter">${letters[i]}</div>
+        <div class="option-text">${opt.text}</div>
+      </div>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${optionsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select the best answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'rightsizing' || step.type === 'spot-quiz') {
+    container.innerHTML = step.render();
+
+  } else if (step.type === 'results') {
+    const maxScore = 180;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+
+    if (pct >= 85) {
+      badge = '🚀'; headline = 'Right-Sizing Master!'; desc = 'You have the skills to cut cloud waste significantly. Put this into practice this week — your CFO will thank you.';
+    } else if (pct >= 55) {
+      badge = '💡'; headline = 'Solid understanding!'; desc = 'Good instincts. Review the feedback above and you\'ll be right-sizing like a pro.';
+    } else {
+      badge = '📖'; headline = 'Keep learning!'; desc = 'Right-sizing takes practice. Re-read the explanations — small changes here can save thousands per month.';
+    }
+
+    const totalBothModules = score;
+
+    container.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Match instance family to workload: compute (c5) for CPU, memory (r5) for RAM-heavy, general (m5) for balanced</li>
+            <li>24/7 stable workloads → buy Reserved Instances. Save 40-60% immediately.</li>
+            <li>Average CPU under 30%? Right-size or consolidate. Use Auto Scaling for spikes.</li>
+            <li>Use Spot Instances for fault-tolerant, stateless, or retry-able workloads only</li>
+            <li>Never run a database, cache, or stateful service on Spot Instances</li>
+            <li>Set up AWS Compute Optimizer — it gives right-sizing recommendations automatically</li>
+          </ul>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin:20px 0;text-align:left">
+          <div style="font-size:0.8rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:12px">🛠️ Start Here This Week</div>
+          <table class="comparison-table">
+            <thead><tr><th>Action</th><th>Effort</th><th>Potential Savings</th></tr></thead>
+            <tbody>
+              <tr><td>Enable AWS Compute Optimizer</td><td>5 min</td><td class="highlight">Up to 25% on EC2</td></tr>
+              <tr><td>Buy RIs for stable workloads</td><td>30 min</td><td class="highlight">40% on those services</td></tr>
+              <tr><td>Move CI/CD to Spot</td><td>2 hours</td><td class="highlight">Up to 80% on build costs</td></tr>
+              <tr><td>Right-size low-CPU instances</td><td>1 day</td><td class="highlight">20-40% on EC2 spend</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="results-actions">
+          <a href="index.html" class="btn btn-primary">🏠 Back to hub</a>
+          <a href="module1.html" class="btn btn-ghost">← Replay Module 1</a>
+        </div>
+      </div>
+    `;
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+  }
+}
+
+renderStep();
+</script>
+
+</body>
+</html>
