@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module 1: Zombie Resources — Developer Track — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">Dev · Module 1 of 8</span>
+</nav>
+
+<main class="training-page">
+
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="step-container"></div>
+
+</main>
+
+<script>
+/* ─── Instances data ─── */
+const instances = [
+  { id: 0, name: 'test-env-alex',      tag: 'test',       age: '127 days', cost: '$186/mo', activity: '127 days ago', activityOld: true,  owner: '—',      isZombie: true  },
+  { id: 1, name: 'prod-api-01',         tag: 'production', age: '45 days',  cost: '$240/mo', activity: '2 hours ago',  activityOld: false, owner: '@alex',  isZombie: false },
+  { id: 2, name: 'temp-db-migration',   tag: 'temp',       age: '94 days',  cost: '$312/mo', activity: '94 days ago',  activityOld: true,  owner: '—',      isZombie: true  },
+  { id: 3, name: 'dev-sandbox-sarah',   tag: 'dev',        age: '203 days', cost: '$96/mo',  activity: '3 days ago',   activityOld: false, owner: '@sarah', isZombie: false },
+  { id: 4, name: 'staging-frontend-v2', tag: 'staging',    age: '67 days',  cost: '$156/mo', activity: '2 days ago',   activityOld: false, owner: '@team',  isZombie: false },
+  { id: 5, name: 'test-perf-jan2024',   tag: 'test',       age: '89 days',  cost: '$186/mo', activity: '89 days ago',  activityOld: true,  owner: '—',      isZombie: true  },
+  { id: 6, name: 'ml-experiment-003',   tag: 'experiment', age: '156 days', cost: '$420/mo', activity: '156 days ago', activityOld: true,  owner: '—',      isZombie: true  },
+  { id: 7, name: 'backup-test-mike',    tag: 'test',       age: '31 days',  cost: '$96/mo',  activity: '5 days ago',   activityOld: false, owner: '@mike',  isZombie: false },
+];
+
+/* ─── State ─── */
+let currentStep = 0;
+let score = 0;
+let answered = false;
+
+/* ─── Steps ─── */
+const steps = [
+
+  /* 0 — Scene */
+  { type: 'scene' },
+
+  /* 1 — Simulation */
+  { type: 'simulation' },
+
+  /* 2 — Quiz */
+  {
+    type: 'quiz',
+    points: 40,
+    question: "You've identified the zombie instances. What's the correct process before deleting them?",
+    options: [
+      { text: "Delete them immediately — you've confirmed they're idle, no need to wait.", correct: false },
+      { text: "Post in #engineering: 'Deleting these instances in 48h — reply if you need them.' Then delete with no reply.", correct: true },
+      { text: "Downgrade them to a cheaper instance type — they might be needed someday.", correct: false },
+      { text: "Open a formal ticket with IT and wait for sign-off from each team.", correct: false },
+    ],
+    feedback: {
+      correct: "🎯 Exactly. Even when confident resources are idle, a 48h notification window protects you from accidents and builds team trust. Pro tip: automate this with a Lambda that tags every new resource with <code>owner</code> + <code>expires-at</code> on creation.",
+      wrong:   "❌ Deleting without warning is risky — even idle-looking resources can be secretly depended on. The golden rule: <strong>notify first, wait 48h, then delete</strong>. This protects you from incidents and gives owners a fair chance to respond."
+    }
+  },
+
+  /* 3 — Decision */
+  {
+    type: 'decision',
+    points: 40,
+    slackFrom: 'Alex Chen · Engineering Manager',
+    slackInitials: 'AC',
+    slackAvatarClass: 'mgr',
+    slackTime: 'Today at 6:12 PM',
+    slackText: "Hey — good catch on those zombie instances! But honestly, just kill them now. We're burning over $1K/mo on this junk and nobody's going to respond to your Slack message anyway. Can you just delete everything today? 🙏",
+    choices: [
+      {
+        label: '🗑️ Delete now — manager approved it, that\'s enough',
+        outcome: 'bad',
+        text: "🔴 Even with manager approval, skipping the notification window is risky. If one of those instances was secretly used by a cron job or internal script, you've just caused an incident — and it'll be traced back to you. The 48h grace period exists to protect <em>you</em>, not slow you down."
+      },
+      {
+        label: '⏳ Explain the process, stick to the 48h window',
+        outcome: 'good',
+        text: "🟢 Right call. A simple reply: <em>'Happy to — but our process is a 48h warning so we don't accidentally break anything. I posted in #engineering now and will delete Sunday if no replies.'</em> Two extra days vs months of ongoing waste. Worth the patience."
+      },
+      {
+        label: '🙈 Do nothing — too risky to touch any of it',
+        outcome: 'ok',
+        text: "🟡 Analysis paralysis. The waste continues every single day you don't act. FinOps is about making <em>informed</em> decisions, not avoiding them. You have a process — notify, wait, delete. Follow it."
+      },
+    ]
+  },
+
+  /* 4 — Insight */
+  { type: 'insight' },
+
+  /* 5 — Results */
+  { type: 'results' }
+
+];
+
+/* ─── Simulation helpers ─── */
+function toggleInstance(index) {
+  const cb = document.getElementById('cb-' + index);
+  if (!cb || cb.disabled) return;
+  cb.checked = !cb.checked;
+  document.getElementById('row-' + index).classList.toggle('selected', cb.checked);
+  updateSimCount();
+}
+
+function updateSimCount() {
+  let count = 0;
+  instances.forEach(function(_, i) {
+    const cb = document.getElementById('cb-' + i);
+    if (cb && cb.checked) count++;
+  });
+  const el = document.getElementById('sim-count');
+  if (el) el.textContent = count + ' instance' + (count !== 1 ? 's' : '') + ' selected';
+  const btn = document.getElementById('sim-submit-btn');
+  if (btn) btn.disabled = count === 0;
+}
+
+function submitSimulation() {
+  let simScore = 0;
+  let zombiesFound = 0;
+  let falsePosCount = 0;
+  const totalZombies = instances.filter(function(i) { return i.isZombie; }).length;
+
+  instances.forEach(function(inst, i) {
+    const row = document.getElementById('row-' + i);
+    const cb  = document.getElementById('cb-' + i);
+    const res = document.getElementById('result-' + i);
+    cb.disabled = true;
+    const selected = cb.checked;
+
+    if (inst.isZombie && selected) {
+      row.className = 'instance-row result-correct-zombie';
+      res.innerHTML = '<span class="result-label zombie">🧟 Zombie · +15pts</span>';
+      simScore += 15;
+      zombiesFound++;
+    } else if (!inst.isZombie && !selected) {
+      row.className = 'instance-row result-safe';
+      res.innerHTML = '<span class="result-label safe">✅ Safe</span>';
+    } else if (inst.isZombie && !selected) {
+      row.className = 'instance-row result-missed';
+      res.innerHTML = '<span class="result-label missed">⚠️ Missed</span>';
+    } else {
+      row.className = 'instance-row result-fp';
+      res.innerHTML = '<span class="result-label fp">❌ Not a zombie · −5pts</span>';
+      simScore = Math.max(0, simScore - 5);
+      falsePosCount++;
+    }
+  });
+
+  score += simScore;
+  updateScoreDisplay();
+
+  const allFound = zombiesFound === totalZombies;
+  let feedbackHtml = '<div class="feedback ' + (allFound ? 'correct-fb' : 'wrong-fb') + ' show">';
+  feedbackHtml += '<div class="feedback-title">' + (allFound ? '🎯 ' : '⚠️ ') + 'Found ' + zombiesFound + '/' + totalZombies + ' zombie resources';
+  if (simScore > 0) feedbackHtml += ' · +' + simScore + ' pts';
+  feedbackHtml += '</div>';
+  if (falsePosCount > 0) {
+    feedbackHtml += '<p style="margin-bottom:8px">Watch out: <strong>' + falsePosCount + ' false positive' + (falsePosCount > 1 ? 's' : '') + '</strong>. A resource with recent activity or a clear owner is not a zombie — even with a "test" tag.</p>';
+  }
+  feedbackHtml += '<p><strong>The zombie criteria:</strong> no owner tag <em>AND</em> no recent activity <em>AND</em> old age (90+ days). All three together. Not just the tag.</p>';
+  feedbackHtml += '</div>';
+
+  document.getElementById('sim-feedback').innerHTML = feedbackHtml;
+  document.getElementById('sim-submit-btn').style.display = 'none';
+  document.getElementById('sim-next-btn').disabled = false;
+}
+
+/* ─── Quiz ─── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+
+  const options  = document.querySelectorAll('.option');
+  const feedback = document.getElementById('feedback-box');
+  const nextBtn  = document.getElementById('next-btn');
+  const selected = stepData.options[optionIndex];
+
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong');
+  options[optionIndex].classList.add('selected');
+
+  if (!selected.correct) {
+    stepData.options.forEach(function(opt, i) {
+      if (opt.correct) options[i].classList.add('correct');
+    });
+  }
+
+  options.forEach(function(o) { o.classList.add('disabled'); });
+
+  if (selected.correct) {
+    score += stepData.points;
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = '<div class="feedback-title">✅ Correct! +' + stepData.points + ' pts</div>' + stepData.feedback.correct;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = '<div class="feedback-title">❌ Not quite!</div>' + stepData.feedback.wrong;
+  }
+
+  updateScoreDisplay();
+  nextBtn.disabled = false;
+}
+
+/* ─── Decision ─── */
+function makeDecision(choiceIndex, stepData) {
+  if (answered) return;
+  answered = true;
+
+  document.querySelectorAll('.decision-btn').forEach(function(b) { b.disabled = true; });
+
+  const choice = stepData.choices[choiceIndex];
+  document.getElementById('consequence-' + currentStep + '-' + choiceIndex).classList.add('show');
+
+  if (choice.outcome === 'good') {
+    score += stepData.points;
+  } else if (choice.outcome === 'ok') {
+    score += Math.floor(stepData.points / 2);
+  }
+
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Helpers ─── */
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() {
+  currentStep++;
+  renderStep();
+}
+
+/* ─── Renderer ─── */
+function renderStep() {
+  answered = false;
+
+  const totalSteps = steps.length - 1;
+  const progress = Math.round((currentStep / totalSteps) * 100);
+  document.getElementById('progress-bar').style.width = progress + '%';
+
+  const displayStep = Math.min(currentStep + 1, totalSteps);
+  document.getElementById('step-label').textContent = 'Step ' + displayStep + ' of ' + totalSteps;
+
+  const step = steps[currentStep];
+  const container = document.getElementById('step-container');
+
+  /* ── Scene ── */
+  if (step.type === 'scene') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Scene</div>
+        <h2>Zombie Resources</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          It's Friday at 5:47pm. You're about to close your laptop when you get this automated alert in Slack:
+        </p>
+
+        <div class="slack-widget">
+          <div class="slack-header">
+            <span>🔔</span> #finops-alerts
+          </div>
+          <div class="slack-message">
+            <div class="slack-avatar bot">FB</div>
+            <div class="slack-content">
+              <div class="slack-meta">
+                <span class="slack-name">FinOps Bot</span>
+                <span class="slack-time">Today at 5:47 PM</span>
+              </div>
+              <div class="slack-text">
+                Hey <span class="slack-mention">@engineering</span> — weekly cloud scan complete.<br><br>
+                Found <strong>8 compute instances</strong> tagged <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px">test</code>, <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px">temp</code>, or <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px">experiment</code> that have been running for <strong>30+ days</strong>.<br><br>
+                Combined cost: <strong style="color:#f87171">$1,692/mo</strong>. Some of these may be abandoned. Can someone take a look? 👀
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <div class="scenario-icon">🎯</div>
+          <strong>Your mission:</strong> Review the flagged instances, identify the real zombie resources, handle them correctly — and learn how to prevent this from happening again.
+        </div>
+
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Investigate →</button>
+        </div>
+      </div>
+    `;
+
+  /* ── Simulation ── */
+  } else if (step.type === 'simulation') {
+    const tableRows = instances.map(function(inst, i) {
+      return '<tr class="instance-row" id="row-' + i + '" onclick="toggleInstance(' + i + ')">' +
+        '<td><input type="checkbox" class="instance-checkbox" id="cb-' + i + '" onclick="event.stopPropagation();updateSimCount();" /></td>' +
+        '<td style="font-family:monospace;font-size:0.8rem;color:#e6edf3">' + inst.name + '</td>' +
+        '<td><span class="tag-badge ' + inst.tag + '">' + inst.tag + '</span></td>' +
+        '<td style="color:var(--text-muted)">' + inst.age + '</td>' +
+        '<td style="font-weight:600">' + inst.cost + '</td>' +
+        '<td class="' + (inst.activityOld ? 'activity-old' : 'activity-recent') + '">' + inst.activity + '</td>' +
+        '<td class="' + (inst.owner === '—' ? 'owner-missing' : '') + '">' + inst.owner + '</td>' +
+        '<td id="result-' + i + '"></td>' +
+        '</tr>';
+    }).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Simulation</div>
+        <h2>Find the Zombie Resources</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Here are the 8 flagged instances. <strong>Check the ones you think are zombie resources</strong> — abandoned, idle, and burning money for no reason. Look at the tag, age, last activity, and owner together.
+        </p>
+
+        <div class="cloud-console">
+          <div class="cloud-console-bar">
+            <span class="cloud-console-title">Compute Instances — All Regions</span>
+            <span>8 instances found</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="instance-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Name</th>
+                  <th>Tag</th>
+                  <th>Age</th>
+                  <th>Cost</th>
+                  <th>Last Activity</th>
+                  <th>Owner</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+          <div class="sim-submit-area">
+            <span class="sim-selection-count" id="sim-count">0 instances selected</span>
+            <button class="btn btn-primary" id="sim-submit-btn" onclick="submitSimulation()" disabled>
+              Flag selected as zombies →
+            </button>
+          </div>
+        </div>
+
+        <div id="sim-feedback"></div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select all zombie resources, then submit</span>
+          <button class="btn btn-primary" id="sim-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  /* ── Quiz ── */
+  } else if (step.type === 'quiz') {
+    const letters = ['A', 'B', 'C', 'D'];
+    const optionsHTML = step.options.map(function(opt, i) {
+      return '<div class="option" onclick="answerQuiz(' + i + ', steps[' + currentStep + '])">' +
+        '<div class="option-letter">' + letters[i] + '</div>' +
+        '<div class="option-text">' + opt.text + '</div>' +
+        '</div>';
+    }).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${optionsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select the best answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  /* ── Decision ── */
+  } else if (step.type === 'decision') {
+    const choicesHTML = step.choices.map(function(c, i) {
+      return '<button class="decision-btn" onclick="makeDecision(' + i + ', steps[' + currentStep + '])">' + c.label + '</button>' +
+        '<div class="consequence ' + c.outcome + '" id="consequence-' + currentStep + '-' + i + '">' + c.text + '</div>';
+    }).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Decision — up to ${step.points} pts</div>
+        <h2>Your manager escalates</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          You posted in #engineering about the zombie instances. Two hours later, you get this:
+        </p>
+
+        <div class="slack-widget">
+          <div class="slack-header">
+            <span>💬</span> Direct Message
+          </div>
+          <div class="slack-message">
+            <div class="slack-avatar mgr">AC</div>
+            <div class="slack-content">
+              <div class="slack-meta">
+                <span class="slack-name">${step.slackFrom}</span>
+                <span class="slack-time">${step.slackTime}</span>
+              </div>
+              <div class="slack-text">${step.slackText}</div>
+            </div>
+          </div>
+        </div>
+
+        <p style="margin:16px 0 10px;font-weight:600">What do you do?</p>
+        ${choicesHTML}
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Choose your response</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  /* ── Insight ── */
+  } else if (step.type === 'insight') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>The Real Cost of Zombie Resources</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          The 4 zombie instances in this scenario were silently burning:
+        </p>
+
+        <div class="cost-calc">
+          <div class="cost-line">
+            <span class="cost-name">test-env-alex</span>
+            <span class="cost-amount">$186/mo</span>
+          </div>
+          <div class="cost-line">
+            <span class="cost-name">temp-db-migration</span>
+            <span class="cost-amount">$312/mo</span>
+          </div>
+          <div class="cost-line">
+            <span class="cost-name">test-perf-jan2024</span>
+            <span class="cost-amount">$186/mo</span>
+          </div>
+          <div class="cost-line">
+            <span class="cost-name">ml-experiment-003</span>
+            <span class="cost-amount">$420/mo</span>
+          </div>
+          <div class="cost-line total">
+            <span class="cost-name">Total monthly waste</span>
+            <span class="cost-amount" style="color:var(--warning)">$1,104/mo · $13,248/yr</span>
+          </div>
+        </div>
+
+        <div class="insight-grid">
+          <div class="insight-stat">
+            <div class="insight-stat-value">23%</div>
+            <div class="insight-stat-label">of cloud resources are zombie on average</div>
+          </div>
+          <div class="insight-stat">
+            <div class="insight-stat-value">$340B</div>
+            <div class="insight-stat-label">projected global cloud waste by 2027</div>
+          </div>
+        </div>
+
+        <div class="tip-card">
+          <strong>🔧 How to prevent this automatically — cloud-agnostic:</strong>
+          <ul>
+            <li><strong>Tag on creation</strong> — enforce <code>owner</code>, <code>team</code>, <code>environment</code>, and <code>expires-at</code> in your IaC (Terraform, CDK, Pulumi). No valid tag = deployment blocked.</li>
+            <li><strong>Auto-notify</strong> — a weekly scheduled function that scans for instances older than 60 days with no activity and posts a Slack alert automatically.</li>
+            <li><strong>Auto-stop non-prod</strong> — use a scheduler (AWS Instance Scheduler, GCP Resource Policies, Azure Auto-shutdown) to stop dev/staging resources overnight and on weekends.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See my results 🏆</button>
+        </div>
+      </div>
+    `;
+
+  /* ── Results ── */
+  } else if (step.type === 'results') {
+    const maxScore = 140;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+
+    if (pct >= 75) {
+      badge = '🏆'; headline = 'FinOps Champion!';
+      desc = "Sharp instincts. You spotted the zombies, followed the right process, and pushed back correctly. Your cloud bill thanks you.";
+    } else if (pct >= 45) {
+      badge = '🎯'; headline = 'Good instincts!';
+      desc = "You're on the right track. A few misses, but the core concepts are there. Review the insight section and you'll be cleaning up waste in no time.";
+    } else {
+      badge = '📚'; headline = 'Time to level up!';
+      desc = "Zombie resources are sneaky. Re-read the feedback on each step — the key insight is: tag + age + inactivity together, not just one signal.";
+    }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    container.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>A zombie resource = no owner + no activity + old age. All three, not just the tag.</li>
+            <li>Never delete without a 48h notification window — even with manager approval.</li>
+            <li>Enforce owner + expiry tags in IaC. No tag = no deploy. Make it structural, not cultural.</li>
+            <li>Automate the scan: weekly function + Slack alert catches zombies before they get expensive.</li>
+            <li>Stop non-prod resources overnight — 65% of the week is nights and weekends.</li>
+          </ul>
+        </div>
+
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>
+    `;
+  }
+}
+
+/* ─── Init ─── */
+renderStep();
+</script>
+
+</body>
+</html>
