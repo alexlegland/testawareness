@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 1: Cloud Cost Basics — PM Track — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Email widget */
+    .email-widget {
+      background: #1e1e2e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .email-header {
+      background: #17172a;
+      padding: 10px 16px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .email-subject {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text);
+      padding: 14px 18px 6px;
+      display: block;
+    }
+    .email-from {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      padding: 0 18px 12px;
+      display: block;
+      border-bottom: 1px solid var(--border);
+    }
+    .email-body {
+      padding: 14px 18px 18px;
+      font-size: 0.88rem;
+      color: #c9cdd4;
+      line-height: 1.7;
+    }
+    .email-body strong { color: var(--text); }
+
+    /* Feature cards */
+    .feat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .feat-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .feat-card:not(.disabled):hover {
+      border-color: var(--primary);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(108,71,255,0.15);
+    }
+    .feat-card.disabled { cursor: default; }
+    .feat-card.correct  { border-color: var(--success); background: rgba(34,197,94,0.08); }
+    .feat-card.wrong    { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+    .feat-icon    { font-size: 2rem; margin-bottom: 8px; }
+    .feat-name    { font-weight: 700; font-size: 0.83rem; margin-bottom: 6px; line-height: 1.3; }
+    .feat-desc    { font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-bottom: 10px; }
+    .feat-cost    { font-size: 1.1rem; font-weight: 800; margin: 8px 0 2px; display: none; }
+    .feat-driver  { font-size: 0.68rem; color: var(--text-muted); line-height: 1.3; display: none; }
+    .feat-card.correct .feat-cost { color: var(--danger); }
+    .feat-card:not(.correct) .feat-cost { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">PM · Module 1 of 7</span>
+</nav>
+
+<main class="training-page">
+
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="step-container"></div>
+
+</main>
+
+<script>
+/* ─── Feature data ─── */
+const features = [
+  {
+    icon: '📧',
+    name: 'Weekly email digest',
+    desc: 'Sends a weekly summary email to all 50K active users',
+    cost: 15,
+    costLabel: '$15/mo',
+    driver: 'Email delivery (SES/SendGrid) · bulk email is extremely cheap',
+    isCorrect: false
+  },
+  {
+    icon: '💬',
+    name: 'Real-time typing indicators',
+    desc: '"Sarah is typing…" shown in the chat feature',
+    cost: 180,
+    costLabel: '$180/mo',
+    driver: 'Persistent WebSocket connections + server compute per active user',
+    isCorrect: false
+  },
+  {
+    icon: '🎥',
+    name: 'In-app video playback',
+    desc: 'Users upload and watch videos directly in the product',
+    cost: 2400,
+    costLabel: '$2,400/mo',
+    driver: 'Storage (S3/GCS) + CDN video streaming egress compounds with every view',
+    isCorrect: true
+  },
+  {
+    icon: '📊',
+    name: 'Export to CSV',
+    desc: 'One-click export of any data table to a CSV file',
+    cost: 8,
+    costLabel: '$8/mo',
+    driver: 'On-demand compute only · runs in seconds, no persistent infra',
+    isCorrect: false
+  },
+  {
+    icon: '🔍',
+    name: 'Full-text search',
+    desc: 'Search across all content with instant results',
+    cost: 380,
+    costLabel: '$380/mo',
+    driver: 'Search cluster (OpenSearch/Elasticsearch) running 24/7 regardless of usage',
+    isCorrect: false
+  }
+];
+
+/* ─── State ─── */
+let currentStep = 0;
+let score = 0;
+let answered = false;
+let featAnswered = false;
+
+/* ─── Steps ─── */
+const steps = [
+  { type: 'scene' },
+  { type: 'simulation' },
+  {
+    type: 'quiz',
+    points: 40,
+    question: "Your next sprint includes a 'video messaging' feature. Before approving it in the roadmap, what's the most important question to ask Engineering?",
+    options: [
+      { text: "How long will it take to build?", correct: false },
+      { text: "What's the estimated monthly cost to run at our current scale?", correct: true },
+      { text: "What's the technical complexity and risk?", correct: false },
+      { text: "Does it fit our Q3 product strategy?", correct: false },
+    ],
+    feedback: {
+      correct: "🎯 Exactly. Build time is a one-time cost. Running cost is forever. A feature that takes 2 weeks to build but costs $8K/month to run at scale is a very different investment than one that costs $50/month. Always ask: <strong>what does this cost per month at 10x our current users?</strong>",
+      wrong:   "❌ Build time and strategy are important — but they're one-time considerations. <strong>Running cost scales with your users and never stops.</strong> A feature that costs $2,400/month at 50K users costs $24,000/month at 500K users. Ask about this before it's in the roadmap."
+    }
+  },
+  {
+    type: 'decision',
+    points: 40,
+    slackFrom: 'Thomas Bernard · VP of Product',
+    slackInitials: 'TB',
+    slackAvatarClass: 'mgr',
+    slackTime: 'Today at 11:30 AM',
+    slackText: "Hey — I want to add live video streaming to the Q4 roadmap. Users have been asking for it for months. Engineering says it's technically feasible and they can ship it in 3 weeks. I'm going to add it to the Q4 plan. Does that work for you?",
+    choices: [
+      {
+        label: "✅ Approve it — Engineering says it's feasible and users want it",
+        outcome: 'bad',
+        text: "🔴 'Technically feasible' is not the same as 'economically viable'. Live streaming involves real-time video encoding, storage, and high egress costs that compound fast. At 50K users watching 10 min/day, you could easily be looking at $15–40K/month. That's a business decision, not just an engineering one."
+      },
+      {
+        label: "💬 Ask for a cost estimate before it goes on the roadmap",
+        outcome: 'good',
+        text: "🟢 Right move. A simple ask: <em>'Can Engineering give us a rough monthly cost estimate at our current scale and at 2x?'</em> takes one hour and could save months of unexpected bills. FinOps-aware PMs ask about running cost before build cost — every time."
+      },
+      {
+        label: "📋 Add it to the backlog without a cost estimate — figure it out later",
+        outcome: 'ok',
+        text: "🟡 Backlog items become roadmap items fast. Once engineering starts scoping a feature, it's much harder to pump the brakes. The cost question is easiest to ask before the commitment is made — not after the sprint has started."
+      },
+    ]
+  },
+  { type: 'insight' },
+  { type: 'results' }
+];
+
+/* ─── Simulation ─── */
+function selectFeature(index) {
+  if (featAnswered) return;
+  featAnswered = true;
+
+  const selected = features[index];
+
+  features.forEach(function(feat, i) {
+    const card   = document.getElementById('feat-' + i);
+    const costEl = document.getElementById('feat-cost-' + i);
+    const drvEl  = document.getElementById('feat-driver-' + i);
+    card.classList.add('disabled');
+    costEl.style.display = 'block';
+    drvEl.style.display  = 'block';
+    if (feat.isCorrect) card.classList.add('correct');
+    if (i === index && !feat.isCorrect) card.classList.add('wrong');
+  });
+
+  let pts = 0;
+  if (selected.isCorrect)    pts = 40;
+  else if (selected.cost >= 200) pts = 20;
+
+  score += pts;
+  updateScoreDisplay();
+
+  const isCorrect = selected.isCorrect;
+  document.getElementById('feat-feedback').innerHTML =
+    '<div class="feedback ' + (isCorrect ? 'correct-fb' : 'wrong-fb') + ' show">' +
+    '<div class="feedback-title">' + (isCorrect ? '🎯 Correct!' : '❌ Not quite!') +
+    (pts > 0 ? ' · +' + pts + ' pts' : '') + '</div>' +
+    (isCorrect
+      ? 'Video costs <strong>$2,400/mo</strong> — 160x more than a CSV export, 6x more than full-text search. Storage + CDN egress compounds with every view at scale. Always ask for a cost estimate before scoping media-heavy features.'
+      : 'The most expensive feature is <strong>in-app video ($2,400/mo)</strong> — 160x more than CSV export. Storage + CDN video streaming egress compounds with every view. The "simple" features are often the most costly to run.') +
+    '</div>';
+
+  document.getElementById('feat-next-btn').disabled = false;
+}
+
+/* ─── Quiz ─── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+  const options  = document.querySelectorAll('.option');
+  const selected = stepData.options[optionIndex];
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong', 'selected');
+  if (!selected.correct) {
+    stepData.options.forEach(function(opt, i) { if (opt.correct) options[i].classList.add('correct'); });
+  }
+  options.forEach(function(o) { o.classList.add('disabled'); });
+  const feedback = document.getElementById('feedback-box');
+  if (selected.correct) {
+    score += stepData.points;
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = '<div class="feedback-title">✅ Correct! +' + stepData.points + ' pts</div>' + stepData.feedback.correct;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = '<div class="feedback-title">❌ Not quite!</div>' + stepData.feedback.wrong;
+  }
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Decision ─── */
+function makeDecision(idx, stepData) {
+  if (answered) return;
+  answered = true;
+  document.querySelectorAll('.decision-btn').forEach(function(b) { b.disabled = true; });
+  const choice = stepData.choices[idx];
+  document.getElementById('consequence-' + currentStep + '-' + idx).classList.add('show');
+  if (choice.outcome === 'good') score += stepData.points;
+  else if (choice.outcome === 'ok') score += Math.floor(stepData.points / 2);
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+/* ─── Renderer ─── */
+function renderStep() {
+  answered = false;
+  const totalSteps = steps.length - 1;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / totalSteps) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, totalSteps) + ' of ' + totalSteps;
+
+  const step = steps[currentStep];
+  const container = document.getElementById('step-container');
+
+  if (step.type === 'scene') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Scene</div>
+        <h2>Cloud Cost Basics for PMs</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          It's Monday morning, one week after your biggest product launch of the year. You open your inbox:
+        </p>
+
+        <div class="email-widget">
+          <div class="email-header">📧 Inbox</div>
+          <span class="email-subject">Re: Q3 Infrastructure Costs — Board Report</span>
+          <span class="email-from">From: Marie Dupont, CFO · To: Product Team</span>
+          <div class="email-body">
+            Hi all,<br><br>
+            I was reviewing the Q3 infrastructure report and noticed our cloud bill jumped <strong>34% from Q2 to Q3</strong> — from $41K to $55K/month. This happened right around the major product launch.<br><br>
+            The board is asking what drove this increase. Can someone from product help me understand which features contributed to this jump? We need a breakdown for next week's board meeting.<br><br>
+            If we don't have visibility into this, we need to change how we work going forward.<br><br>
+            — Marie
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <div class="scenario-icon">🎯</div>
+          <strong>Your mission:</strong> Understand which product decisions drive cloud costs — and learn how to factor cost into your decisions before they become board-level surprises.
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Investigate →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'simulation') {
+    featAnswered = false;
+    const cardsHTML = features.map(function(feat, i) {
+      return '<div class="feat-card" id="feat-' + i + '" onclick="selectFeature(' + i + ')">' +
+        '<div class="feat-icon">' + feat.icon + '</div>' +
+        '<div class="feat-name">' + feat.name + '</div>' +
+        '<div class="feat-desc">' + feat.desc + '</div>' +
+        '<div class="feat-cost" id="feat-cost-' + i + '">' + feat.costLabel + '</div>' +
+        '<div class="feat-driver" id="feat-driver-' + i + '">' + feat.driver + '</div>' +
+        '</div>';
+    }).join('');
+
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Simulation</div>
+        <h2>Which feature drove the cost spike?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Your team shipped 5 features in Q3. <strong>Click the one you think had the biggest impact on the cloud bill.</strong> All 5 features are live and being used by your 50K active users.
+        </p>
+
+        <div class="feat-grid">${cardsHTML}</div>
+
+        <div id="feat-feedback"></div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Click to reveal monthly costs</span>
+          <button class="btn btn-primary" id="feat-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'quiz') {
+    const letters = ['A','B','C','D'];
+    const optionsHTML = step.options.map(function(opt, i) {
+      return '<div class="option" onclick="answerQuiz(' + i + ', steps[' + currentStep + '])">' +
+        '<div class="option-letter">' + letters[i] + '</div>' +
+        '<div class="option-text">' + opt.text + '</div></div>';
+    }).join('');
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${optionsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select the best answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'decision') {
+    const choicesHTML = step.choices.map(function(c, i) {
+      return '<button class="decision-btn" onclick="makeDecision(' + i + ', steps[' + currentStep + '])">' + c.label + '</button>' +
+        '<div class="consequence ' + c.outcome + '" id="consequence-' + currentStep + '-' + i + '">' + c.text + '</div>';
+    }).join('');
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Decision — up to ${step.points} pts</div>
+        <h2>The streaming feature request</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">Two weeks after the board meeting, you get this Slack message:</p>
+        <div class="slack-widget">
+          <div class="slack-header"><span>💬</span> Direct Message</div>
+          <div class="slack-message">
+            <div class="slack-avatar mgr" style="background:linear-gradient(135deg,#7c3aed,#a855f7)">TB</div>
+            <div class="slack-content">
+              <div class="slack-meta">
+                <span class="slack-name">${step.slackFrom}</span>
+                <span class="slack-time">${step.slackTime}</span>
+              </div>
+              <div class="slack-text">${step.slackText}</div>
+            </div>
+          </div>
+        </div>
+        <p style="margin:16px 0 10px;font-weight:600">What do you do?</p>
+        ${choicesHTML}
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Choose your response</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'insight') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>Cost Is a Product Decision</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Every feature has a cloud cost model. Here's how the 5 features from this scenario compare:
+        </p>
+
+        <div class="cost-calc">
+          <div class="cost-line"><span class="cost-name">Export to CSV</span><span class="cost-amount" style="color:var(--success)">$8/mo</span></div>
+          <div class="cost-line"><span class="cost-name">Weekly email digest</span><span class="cost-amount" style="color:var(--success)">$15/mo</span></div>
+          <div class="cost-line"><span class="cost-name">Real-time typing indicators</span><span class="cost-amount" style="color:var(--warning)">$180/mo</span></div>
+          <div class="cost-line"><span class="cost-name">Full-text search cluster</span><span class="cost-amount" style="color:var(--warning)">$380/mo</span></div>
+          <div class="cost-line total"><span class="cost-name">In-app video playback</span><span class="cost-amount">$2,400/mo</span></div>
+        </div>
+
+        <div class="insight-grid">
+          <div class="insight-stat"><div class="insight-stat-value">160x</div><div class="insight-stat-label">more expensive than a CSV export</div></div>
+          <div class="insight-stat"><div class="insight-stat-value">3x</div><div class="insight-stat-label">cost increase at 3x your user base</div></div>
+        </div>
+
+        <div class="tip-card">
+          <strong>📋 The FinOps PM checklist — before adding any feature to the roadmap:</strong>
+          <ul>
+            <li><strong>Ask Engineering:</strong> "What's the estimated monthly cost to run this at our scale and at 3x our scale?"</li>
+            <li><strong>Check the cost model:</strong> Does cost scale with users, data volume, requests, or storage? (Video = all four.)</li>
+            <li><strong>Calculate unit economics:</strong> Cost per user, cost per transaction. If it's > $0.10/user/month, flag it.</li>
+            <li><strong>Budget it upfront:</strong> Treat running cost like headcount — it needs to be in the plan before you commit.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See my results 🏆</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'results') {
+    const maxScore = 120;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+    if (pct >= 75)      { badge = '🏆'; headline = 'FinOps-aware PM!';   desc = 'You know how to spot the expensive feature, ask the right questions, and push back before costs spiral. Your CFO will thank you.'; }
+    else if (pct >= 45) { badge = '🎯'; headline = 'Good instincts!';     desc = 'Core concepts are landing. Remember: running cost scales forever — always ask Engineering before committing to media-heavy features.'; }
+    else                { badge = '📚'; headline = 'Time to level up!';   desc = 'Cloud costs aren\'t Engineering\'s problem alone — they\'re a product decision. Re-read the insight section to see how features map to cost.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    container.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Build cost is one-time. Running cost is forever — and it scales with your users.</li>
+            <li>Media features (video, audio, real-time streaming) have the highest and most variable cloud cost.</li>
+            <li>Always ask: "What does this cost per month at 3x our current scale?"</li>
+            <li>Treat running cost like headcount — budget it before it's committed, not after it's live.</li>
+            <li>Cost visibility starts with tagging — if features aren't tagged, you can't break down the bill by product area.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>
+    `;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
