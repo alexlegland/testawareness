@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module 2: Dev Environment Hygiene — Developer Track — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .scheduler-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    .scheduler-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    .scheduler-toggle input { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+    .scheduler-options { display: none; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 4px; }
+    .scheduler-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .scheduler-row:last-child { border-bottom: none; }
+    .scheduler-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .scheduler-row select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 0.88rem;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+    .cost-preview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .cost-preview-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.88rem;
+      padding: 5px 0;
+    }
+    .cost-preview-row .label { color: var(--text-muted); }
+    .cost-preview-row .val   { font-weight: 700; }
+    .cost-preview-row .val.red    { color: var(--danger); }
+    .cost-preview-row .val.green  { color: var(--success); }
+    .cost-preview-row .val.yellow { color: var(--warning); }
+    .savings-pct {
+      display: inline-block;
+      background: rgba(34,197,94,0.15);
+      color: var(--success);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
+  <span class="nav-badge">Dev · Module 2 of 8</span>
+</nav>
+
+<main class="training-page">
+
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div id="step-container"></div>
+
+</main>
+
+<script>
+/* ─── Constants ─── */
+const HOURLY_RATE = 0.1664;
+const DEVS = 6;
+const BASE_COST = Math.round(HOURLY_RATE * DEVS * 730); // ~$729/mo
+
+/* ─── State ─── */
+let currentStep = 0;
+let score = 0;
+let answered = false;
+
+/* ─── Steps ─── */
+const steps = [
+  { type: 'scene' },
+  { type: 'simulation' },
+  {
+    type: 'quiz',
+    points: 40,
+    question: "You propose scheduled shutdown for all dev instances. Three developers immediately push back: 'We sometimes work late — this will kill our workflow.' What's the best response?",
+    options: [
+      { text: "Cancel the schedule — developer experience comes first, always.", correct: false },
+      { text: "Keep the schedule and give devs a one-command way to manually restart their own instance when needed.", correct: true },
+      { text: "Create exceptions for the three developers who complained.", correct: false },
+      { text: "Push the shutdown time to midnight — that's late enough for anyone.", correct: false },
+    ],
+    feedback: {
+      correct: "🎯 Exactly. A <code>aws ec2 start-instances</code> CLI alias or a Slack bot command takes 5 minutes to set up and removes all friction. Developers keep full flexibility, you keep the savings. The key insight: make the override easy, not the exception.",
+      wrong:   "❌ Cancelling wastes the savings. Midnight shutdowns miss overnight and weekend waste. Per-person exceptions don't scale. The right answer: <strong>keep the schedule, but give devs a self-service restart</strong> via CLI alias, Slack bot, or a simple web button. Best of both worlds."
+    }
+  },
+  {
+    type: 'decision',
+    points: 40,
+    slackFrom: 'Jordan Lee · Backend Developer',
+    slackInitials: 'JL',
+    slackAvatarClass: 'mgr',
+    slackTime: 'Yesterday at 2:34 AM',
+    slackText: "Hey — my dev instance shut down at 8pm and I was in the middle of an urgent staging deployment. I had to spin up a new one and lost 45 minutes. This is a real problem. Can we just turn off the scheduler?",
+    choices: [
+      {
+        label: "🔕 Disable the scheduler — production issues take priority",
+        outcome: 'bad',
+        text: "🔴 Disabling the scheduler means $460/mo in savings is gone permanently because of one edge case. Also — why was a staging deployment happening at 2am on a dev instance? That's a process issue, not a scheduler issue."
+      },
+      {
+        label: "🔧 Add a self-service restart command so Jordan can unblock instantly",
+        outcome: 'good',
+        text: "🟢 Right call. Set up a one-liner: <code style='background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px'>aws ec2 start-instances --instance-ids i-xxxx</code> as a shell alias, or a Slack bot command. Jordan is unblocked in 30 seconds next time. Savings stay intact."
+      },
+      {
+        label: "📋 Create a scheduler exception for late-night deployments",
+        outcome: 'ok',
+        text: "🟡 Better than disabling entirely, but per-person exceptions don't scale and are a maintenance headache. The real fix is a self-service restart mechanism that works for everyone. Also worth asking: should staging deployments be done from dev instances at 2am?"
+      },
+    ]
+  },
+  { type: 'insight' },
+  { type: 'results' }
+];
+
+/* ─── Scheduler ─── */
+function toggleScheduler() {
+  const enabled = document.getElementById('sched-enabled').checked;
+  document.getElementById('sched-options').style.display = enabled ? 'block' : 'none';
+  updateCostPreview();
+}
+
+function updateCostPreview() {
+  const enabled  = document.getElementById('sched-enabled').checked;
+  const stopHour = parseInt(document.getElementById('stop-time').value);
+  const startHour= parseInt(document.getElementById('start-time').value);
+  const wkdOff   = document.getElementById('weekends-off').checked;
+
+  let optCost = BASE_COST;
+
+  if (enabled) {
+    const runPerDay  = Math.max(1, stopHour - startHour);
+    const wkdayHrs   = 5 * runPerDay;
+    const wkendHrs   = wkdOff ? 0 : 2 * 24;
+    const hrsPerWeek = wkdayHrs + wkendHrs;
+    optCost = Math.round(HOURLY_RATE * DEVS * hrsPerWeek * (730 / 168));
+  }
+
+  const savings = BASE_COST - optCost;
+  const pct     = Math.round((savings / BASE_COST) * 100);
+
+  document.getElementById('opt-cost').textContent    = '$' + optCost + '/mo';
+  document.getElementById('sched-savings').textContent = savings > 0 ? '−$' + savings + '/mo' : '$0/mo';
+  document.getElementById('annual-savings').textContent = savings > 0 ? '−$' + (savings * 12).toLocaleString() + '/yr' : '$0/yr';
+
+  const pctEl = document.getElementById('savings-pct');
+  if (pctEl) pctEl.textContent = pct > 0 ? pct + '% saved' : '';
+
+  document.getElementById('opt-cost').style.color =
+    savings > 350 ? 'var(--success)' : savings > 100 ? 'var(--warning)' : 'var(--danger)';
+
+  return { savings, pct };
+}
+
+function submitScheduler() {
+  const { savings, pct } = updateCostPreview();
+
+  let pts = 0;
+  if (pct >= 55) pts = 40;
+  else if (pct >= 30) pts = 20;
+  else if (pct > 0)   pts = 10;
+
+  score += pts;
+  updateScoreDisplay();
+
+  const isGood = pct >= 55;
+  const isOk   = pct >= 30;
+
+  document.getElementById('sched-feedback').innerHTML =
+    '<div class="feedback ' + (isGood || isOk ? 'correct-fb' : 'wrong-fb') + ' show">' +
+    '<div class="feedback-title">' + (isGood ? '🎯 Excellent setup!' : isOk ? '✅ Good start!' : '⚠️ Room to improve') +
+    (pts > 0 ? ' · +' + pts + ' pts' : '') + '</div>' +
+    '<p>Your schedule saves <strong>' + pct + '%</strong> ($' + savings + '/mo · $' + (savings * 12).toLocaleString() + '/yr). ' +
+    (pct < 55 ? 'Tip: enable weekends shutdown — that\'s 48 hours of pure waste every week.' :
+      'The weekend toggle is the biggest lever — 2 full days where no one is working but instances are running.') +
+    '</p></div>';
+
+  document.getElementById('sched-submit').disabled = true;
+  document.getElementById('sched-next-btn').disabled = false;
+}
+
+/* ─── Quiz ─── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+  const options  = document.querySelectorAll('.option');
+  const feedback = document.getElementById('feedback-box');
+  const selected = stepData.options[optionIndex];
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong', 'selected');
+  if (!selected.correct) {
+    stepData.options.forEach(function(opt, i) { if (opt.correct) options[i].classList.add('correct'); });
+  }
+  options.forEach(function(o) { o.classList.add('disabled'); });
+  if (selected.correct) {
+    score += stepData.points;
+    feedback.className = 'feedback correct-fb show';
+    feedback.innerHTML = '<div class="feedback-title">✅ Correct! +' + stepData.points + ' pts</div>' + stepData.feedback.correct;
+  } else {
+    feedback.className = 'feedback wrong-fb show';
+    feedback.innerHTML = '<div class="feedback-title">❌ Not quite!</div>' + stepData.feedback.wrong;
+  }
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+/* ─── Decision ─── */
+function makeDecision(idx, stepData) {
+  if (answered) return;
+  answered = true;
+  document.querySelectorAll('.decision-btn').forEach(function(b) { b.disabled = true; });
+  const choice = stepData.choices[idx];
+  document.getElementById('consequence-' + currentStep + '-' + idx).classList.add('show');
+  if (choice.outcome === 'good') score += stepData.points;
+  else if (choice.outcome === 'ok') score += Math.floor(stepData.points / 2);
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+/* ─── Renderer ─── */
+function renderStep() {
+  answered = false;
+  const totalSteps = steps.length - 1;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / totalSteps) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, totalSteps) + ' of ' + totalSteps;
+
+  const step = steps[currentStep];
+  const container = document.getElementById('step-container');
+
+  if (step.type === 'scene') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Scene</div>
+        <h2>Dev Environment Hygiene</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          Monday morning. You open Slack and see a message from your engineering manager:
+        </p>
+
+        <div class="slack-widget">
+          <div class="slack-header"><span>💬</span> Direct Message</div>
+          <div class="slack-message">
+            <div class="slack-avatar mgr">PM</div>
+            <div class="slack-content">
+              <div class="slack-meta">
+                <span class="slack-name">Priya Mehta · Engineering Manager</span>
+                <span class="slack-time">Today at 9:02 AM</span>
+              </div>
+              <div class="slack-text">
+                Hey — finance flagged our dev instance costs again. We have <strong>6 developers</strong>, each with a dedicated <strong>t3.xlarge instance</strong> ($0.166/hr). They're all running <strong>24/7 — nights, weekends, holidays</strong>.<br><br>
+                That's <strong style="color:#f87171">~$730/mo</strong> for instances that are idle roughly 65% of the time. Can you put together a fix?
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <div class="scenario-icon">🎯</div>
+          <strong>Your mission:</strong> Configure a shutdown schedule that saves money without breaking your team's workflow — then handle the inevitable pushback.
+        </div>
+
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Fix it →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'simulation') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">⚙️ Simulation</div>
+        <h2>Configure the Shutdown Schedule</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Set up a scheduled shutdown for the 6 dev instances. Adjust the settings and watch the savings update in real time.
+        </p>
+
+        <div class="scheduler-box">
+          <div class="cost-preview" style="margin-top:0;margin-bottom:16px">
+            <div class="cost-preview-row"><span class="label">Current cost (24/7 · 6 devs)</span><span class="val red">$${BASE_COST}/mo</span></div>
+            <div class="cost-preview-row"><span class="label">With your schedule</span><span class="val" id="opt-cost" style="color:var(--danger)">$${BASE_COST}/mo</span></div>
+            <div class="cost-preview-row"><span class="label">Monthly savings</span><span class="val yellow" id="sched-savings">$0/mo <span class="savings-pct" id="savings-pct"></span></span></div>
+            <div class="cost-preview-row"><span class="label">Annual savings</span><span class="val yellow" id="annual-savings">$0/yr</span></div>
+          </div>
+
+          <label class="scheduler-toggle">
+            <input type="checkbox" id="sched-enabled" onchange="toggleScheduler()" />
+            Enable scheduled shutdown
+          </label>
+
+          <div class="scheduler-options" id="sched-options">
+            <div class="scheduler-row">
+              <span>Daily shutdown time</span>
+              <select id="stop-time" onchange="updateCostPreview()">
+                <option value="18">6:00 PM</option>
+                <option value="19">7:00 PM</option>
+                <option value="20" selected>8:00 PM</option>
+                <option value="22">10:00 PM</option>
+                <option value="24">Midnight</option>
+              </select>
+            </div>
+            <div class="scheduler-row">
+              <span>Daily startup time</span>
+              <select id="start-time" onchange="updateCostPreview()">
+                <option value="6">6:00 AM</option>
+                <option value="7">7:00 AM</option>
+                <option value="8" selected>8:00 AM</option>
+                <option value="9">9:00 AM</option>
+              </select>
+            </div>
+            <div class="scheduler-row">
+              <label>
+                <input type="checkbox" id="weekends-off" onchange="updateCostPreview()" checked />
+                Also stop on weekends (Sat + Sun)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="sched-feedback"></div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Configure, then apply</span>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-ghost" id="sched-submit" onclick="submitScheduler()">Apply configuration →</button>
+            <button class="btn btn-primary" id="sched-next-btn" onclick="nextStep()" disabled>Continue →</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'quiz') {
+    const letters = ['A','B','C','D'];
+    const optionsHTML = step.options.map(function(opt, i) {
+      return '<div class="option" onclick="answerQuiz(' + i + ', steps[' + currentStep + '])">' +
+        '<div class="option-letter">' + letters[i] + '</div>' +
+        '<div class="option-text">' + opt.text + '</div></div>';
+    }).join('');
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${optionsHTML}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Select the best answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'decision') {
+    const choicesHTML = step.choices.map(function(c, i) {
+      return '<button class="decision-btn" onclick="makeDecision(' + i + ', steps[' + currentStep + '])">' + c.label + '</button>' +
+        '<div class="consequence ' + c.outcome + '" id="consequence-' + currentStep + '-' + i + '">' + c.text + '</div>';
+    }).join('');
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Decision — up to ${step.points} pts</div>
+        <h2>The late-night complaint</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">A week after rolling out the scheduler, you get this DM:</p>
+        <div class="slack-widget">
+          <div class="slack-header"><span>💬</span> Direct Message</div>
+          <div class="slack-message">
+            <div class="slack-avatar mgr" style="background:linear-gradient(135deg,#b45309,#d97706)">JL</div>
+            <div class="slack-content">
+              <div class="slack-meta">
+                <span class="slack-name">${step.slackFrom}</span>
+                <span class="slack-time">${step.slackTime}</span>
+              </div>
+              <div class="slack-text">${step.slackText}</div>
+            </div>
+          </div>
+        </div>
+        <p style="margin:16px 0 10px;font-weight:600">What do you do?</p>
+        ${choicesHTML}
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Choose your response</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'insight') {
+    container.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>The Math Behind Idle Dev Instances</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">A developer works roughly 8 hours/day, 5 days/week. Here's what that means for a t3.xlarge running 24/7:</p>
+
+        <div class="cost-calc">
+          <div class="cost-line"><span class="cost-name">Hours in a month</span><span class="cost-amount" style="color:var(--text)">730 hrs</span></div>
+          <div class="cost-line"><span class="cost-name">Hours actually used (8h/day × 22 days)</span><span class="cost-amount" style="color:var(--success)">176 hrs</span></div>
+          <div class="cost-line"><span class="cost-name">Hours wasted (nights + weekends)</span><span class="cost-amount">554 hrs <span style="font-size:0.75rem;color:var(--text-muted)">(76%)</span></span></div>
+          <div class="cost-line total"><span class="cost-name">Wasted cost · 6 devs</span><span class="cost-amount" style="color:var(--warning)">~$460/mo · $5,520/yr</span></div>
+        </div>
+
+        <div class="insight-grid">
+          <div class="insight-stat"><div class="insight-stat-value">76%</div><div class="insight-stat-label">of dev instance time is idle on average</div></div>
+          <div class="insight-stat"><div class="insight-stat-value">30 min</div><div class="insight-stat-label">to set up auto-shutdown on any cloud</div></div>
+        </div>
+
+        <div class="tip-card">
+          <strong>🔧 How to implement — cloud agnostic:</strong>
+          <ul>
+            <li><strong>AWS:</strong> Instance Scheduler (free AWS solution) or EventBridge + Lambda. Set <code>start</code>/<code>stop</code> tags on instances.</li>
+            <li><strong>GCP:</strong> Instance Schedules in Compute Engine — built-in, no extra tools needed.</li>
+            <li><strong>Azure:</strong> Auto-shutdown policy directly in VM settings. Also supports Start/Stop VMs v2.</li>
+            <li><strong>Self-service restart:</strong> Add a shell alias <code>alias wake='aws ec2 start-instances --instance-ids YOUR_ID'</code> or a Slack bot command so devs can restart in seconds.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See my results 🏆</button>
+        </div>
+      </div>
+    `;
+
+  } else if (step.type === 'results') {
+    const maxScore = 120;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+    if (pct >= 75)      { badge = '🏆'; headline = 'FinOps Champion!';    desc = 'You set up the schedule, handled developer pushback correctly, and kept the savings. This is exactly how FinOps wins at the team level.'; }
+    else if (pct >= 45) { badge = '🎯'; headline = 'Good instincts!';      desc = 'Core concept is there. The key takeaway: savings + developer self-service restart = everyone wins.'; }
+    else                { badge = '📚'; headline = 'Time to level up!';    desc = 'Re-read the insight and feedback. The goal is maximum savings without breaking dev workflow — those two things are not mutually exclusive.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    container.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>76% of dev instance time is idle — nights and weekends are pure waste.</li>
+            <li>Scheduled shutdown saves 50–70% with zero impact on productivity during work hours.</li>
+            <li>Always pair auto-shutdown with a self-service restart — removes all developer friction.</li>
+            <li>The weekend toggle is the biggest lever: 2 full days × 6 instances = most of the savings.</li>
+            <li>Same principle applies to staging, QA, and database instances — not just dev boxes.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>
+    `;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
