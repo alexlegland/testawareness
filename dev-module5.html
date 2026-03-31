@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 5: Tagging & Ownership — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tf-block {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      font-family: 'Fira Code','Cascadia Code',monospace;
+      font-size: 0.82rem;
+    }
+    .tf-block-header {
+      background: #161b22;
+      padding: 8px 16px;
+      font-size: 0.72rem;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .tf-code { padding: 14px 16px; color: #c9d1d9; line-height: 1.8; }
+    .tf-kw   { color: #ff7b72; }
+    .tf-str  { color: #a5d6ff; }
+    .tf-key  { color: #79c0ff; }
+    .tf-cmt  { color: #8b949e; font-style: italic; }
+    .tf-tags-placeholder {
+      color: #f0883e;
+      cursor: pointer;
+      text-decoration: underline dotted;
+      border-radius: 4px;
+      padding: 1px 4px;
+      transition: background 0.15s;
+    }
+    .tf-tags-placeholder:hover { background: rgba(240,136,62,0.15); }
+    .tf-tags-filled { color: #3fb950; }
+
+    .tag-picker {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 10px 0;
+    }
+    .tag-picker h4 { font-size: 0.82rem; font-weight: 700; margin-bottom: 10px; color: var(--text-muted); }
+    .tag-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag-opt {
+      font-family: monospace;
+      font-size: 0.78rem;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tag-opt:hover:not(.used):not(.chosen) { border-color: var(--primary); background: rgba(108,71,255,0.1); }
+    .tag-opt.chosen { border-color: var(--success); background: rgba(34,197,94,0.1); color: var(--success); }
+    .tag-opt.used   { opacity: 0.35; cursor: default; }
+    .tag-opt.wrong  { border-color: var(--danger); background: rgba(239,68,68,0.1); color: var(--danger); animation: shake 0.3s; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+
+    .resource-result {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: rgba(34,197,94,0.06);
+      border-left: 3px solid var(--success);
+      border-radius: 0 8px 8px 0;
+      display: none;
+      line-height: 1.6;
+    }
+    .resource-result.show { display: block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 5 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+
+/* For each resource: which tag keys are required, in order */
+var resources = [
+  {
+    id: 'ec2',
+    title: 'aws_instance "api_server"',
+    icon: '🖥️',
+    requiredTags: ['team', 'env', 'feature'],
+    taggedCount: 0,
+    result: 'With team=backend, env=prod, and feature=checkout-api, any cost spike on this instance gets routed directly to the backend team\'s checkout feature. Finance can answer "who owns this?" in seconds.'
+  },
+  {
+    id: 'rds',
+    title: 'aws_db_instance "primary"',
+    icon: '🗄️',
+    requiredTags: ['team', 'env'],
+    taggedCount: 0,
+    result: 'Databases are often shared — adding team and env lets FinOps allocate the cost proportionally and flag if a staging database is sized like production.'
+  },
+  {
+    id: 's3',
+    title: 'aws_s3_bucket "user-uploads"',
+    icon: '📦',
+    requiredTags: ['team', 'env', 'feature'],
+    taggedCount: 0,
+    result: 'S3 storage compounds over time. With proper tags, you\'ll know when the video-upload feature\'s storage is growing faster than expected — and which team to loop in.'
+  }
+];
+
+var allTagsDone = false;
+
+function pickTag(resourceId, tagKey, optEl) {
+  var res = resources.find(function(r) { return r.id === resourceId; });
+  if (!res) return;
+  var expected = res.requiredTags[res.taggedCount];
+  if (tagKey !== expected) {
+    optEl.classList.add('wrong');
+    setTimeout(function() { optEl.classList.remove('wrong'); }, 400);
+    return;
+  }
+  optEl.classList.add('chosen');
+  optEl.classList.remove('wrong');
+  res.taggedCount++;
+
+  /* update code placeholder */
+  var ph = document.getElementById('ph-' + resourceId + '-' + (res.taggedCount - 1));
+  if (ph) {
+    ph.outerHTML = '<span class="tf-tags-filled">' + tagKey + ' = "' + sampleValue(tagKey, resourceId) + '"</span>';
+  }
+
+  if (res.taggedCount >= res.requiredTags.length) {
+    var resultEl = document.getElementById('res-result-' + resourceId);
+    if (resultEl) resultEl.classList.add('show');
+    score += 50;
+    document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+    /* mark remaining options for this resource as used */
+    document.querySelectorAll('[data-res="' + resourceId + '"]').forEach(function(el) {
+      if (!el.classList.contains('chosen')) el.classList.add('used');
+    });
+  }
+
+  /* check all done */
+  var done = resources.every(function(r) { return r.taggedCount >= r.requiredTags.length; });
+  if (done && !allTagsDone) {
+    allTagsDone = true;
+    setTimeout(function() {
+      var btn = document.getElementById('tag-next-btn');
+      if (btn) { btn.disabled = false; btn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    }, 300);
+  }
+}
+
+function sampleValue(key, resId) {
+  if (key === 'team')    return resId === 'rds' ? 'platform' : 'backend';
+  if (key === 'env')     return 'prod';
+  if (key === 'feature') return resId === 's3' ? 'user-uploads' : 'checkout-api';
+  return 'value';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🏷️ Ownership</div>
+        <h2>Finance asks: "Who owns this $4K/mo database?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          It's month-end. Finance is chasing a $4K/mo RDS instance that appeared on the bill six months ago. Nobody in the team has any idea who created it or what it's for.
+        </p>
+        <div class="scenario-box">
+          This happens when infrastructure is created without tags. The fix isn't retroactive — it's a habit: <strong>every resource you create in code gets the right tags before it ships.</strong>
+          <br><br>
+          In the next step you'll tag three Terraform resources by selecting the correct tags in the right order.
+        </div>
+        <div class="tip-card">
+          💡 <strong>Why order matters:</strong> A tagging standard needs to be consistent across every resource. The convention in this exercise: <code style="background:rgba(108,71,255,0.15);padding:2px 6px;border-radius:4px">team → env → feature</code>. Pick them in that order.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Tag the resources →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    allTagsDone = false;
+    resources.forEach(function(r) { r.taggedCount = 0; });
+
+    var allTagOpts = ['team', 'env', 'feature', 'cost-center', 'owner', 'version'];
+
+    var blocksHTML = resources.map(function(res) {
+      /* build placeholders */
+      var placeholders = res.requiredTags.map(function(tag, i) {
+        return '    <span id="ph-' + res.id + '-' + i + '" class="tf-tags-placeholder" onclick="document.querySelector(\'[data-res=\\\'' + res.id + '\\\']\\\'.wl-opt:not(.chosen):not(.used)\')?.click()">▸ select tag</span><br>';
+      }).join('');
+
+      var optsHTML = allTagOpts.map(function(t) {
+        return '<span class="tag-opt" data-res="' + res.id + '" data-key="' + t + '" onclick="pickTag(\'' + res.id + '\',\'' + t + '\',this)">' + t + '=</span>';
+      }).join('');
+
+      return '<div class="tf-block">' +
+        '<div class="tf-block-header"><span>' + res.icon + ' ' + res.title + '</span><span style="color:#3fb950;font-size:0.68rem">needs tags</span></div>' +
+        '<div class="tf-code">' +
+          '<span class="tf-kw">resource</span> <span class="tf-str">"' + res.title.split(' ')[0] + '"</span> <span class="tf-str">"' + res.title.split('"')[3] + '"</span> {<br>' +
+          '  <span class="tf-cmt"># ... resource config ...</span><br>' +
+          '  <span class="tf-key">tags</span> = {<br>' +
+          placeholders +
+          '  }<br>' +
+        '}<br>' +
+        '</div>' +
+        '<div class="tag-picker">' +
+          '<h4>Pick the next tag for this resource (in order):</h4>' +
+          '<div class="tag-options">' + optsHTML + '</div>' +
+        '</div>' +
+        '<div class="resource-result" id="res-result-' + res.id + '">' + res.result + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🏷️ Tag 3 resources — 3 × 50 pts</div>
+        <h2>Add the right tags, in order</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">For each resource, click the tags in the correct order: <strong>team → env → feature</strong>. Wrong order = wrong answer.</p>
+        ${blocksHTML}
+        <div class="step-actions" style="margin-top:4px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Tag all 3 resources to continue</span>
+          <button class="btn btn-primary" id="tag-next-btn" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 150;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 80)     { badge = '🏆'; headline = 'Tag discipline locked in!'; desc = 'Every resource you create now ships with team, env, and feature. That\'s the habit that prevents "who owns this?" at month-end.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good start!'; desc = 'Tagging is a muscle — the key is building it into your workflow before resources ship, not after.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Consistent tag order matters as much as the tags themselves. team → env → feature is a common starting convention — most FinOps tooling expects consistent key names.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Tag at creation time — retroactive tagging is slow, inaccurate, and never gets done.</li>
+            <li>Minimum useful set for cost attribution: <code>team</code>, <code>env</code>, and <code>feature</code> (or <code>product</code>).</li>
+            <li>In Terraform: use a <code>locals</code> block for common tags and merge with resource-specific ones — avoids repetition across every resource block.</li>
+            <li>If your team uses a module registry, add required tags as input variables to the module — they can't be forgotten if the module enforces them.</li>
+            <li>Some orgs enforce tags via CI/CD (Terraform plan fails without required tags). This is the most reliable approach.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 8: CI/CD Pipeline Costs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* YAML viewer */
+    .yaml-block {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 14px 0;
+      font-family: 'Fira Code','Cascadia Code',monospace;
+      font-size: 0.8rem;
+    }
+    .yaml-header {
+      background: #161b22;
+      padding: 8px 16px;
+      font-size: 0.72rem;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .yaml-section {
+      border-bottom: 1px solid #21262d;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .yaml-section:last-child { border-bottom: none; }
+    .yaml-section:hover:not(.flagged):not(.locked) { background: rgba(255,255,255,0.03); }
+    .yaml-section.flagged { background: rgba(245,158,11,0.08); border-left: 3px solid var(--warning); }
+    .yaml-section.locked  { cursor: default; }
+    .yaml-lines { padding: 8px 16px; }
+    .yaml-line { padding: 1px 0; color: #c9d1d9; white-space: pre; }
+    .yaml-line.ky  { color: #79c0ff; }
+    .yaml-line.val { color: #a5d6ff; }
+    .yaml-line.cmt { color: #8b949e; font-style: italic; }
+    .yaml-line.str { color: #a5d6ff; }
+    .yaml-flag-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 16px 8px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .yaml-flag-row .flag-hint { opacity: 0.6; }
+    .yaml-flag-row .flag-badge {
+      background: rgba(245,158,11,0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245,158,11,0.4);
+      padding: 2px 10px;
+      border-radius: 99px;
+      font-weight: 700;
+      display: none;
+    }
+    .yaml-section.flagged .flag-badge { display: inline-block; }
+    .yaml-reveal {
+      display: none;
+      padding: 10px 16px 12px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      border-top: 1px solid #21262d;
+      background: rgba(0,0,0,0.2);
+    }
+    .yaml-section.revealed .yaml-reveal { display: block; }
+
+    /* cost comparison */
+    .pipe-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    @media (max-width: 500px) { .pipe-compare { grid-template-columns: 1fr; } }
+    .pc-col {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .pc-col.before { border-color: rgba(239,68,68,0.3); }
+    .pc-col.after  { border-color: rgba(34,197,94,0.3); }
+    .pc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin-bottom: 10px; }
+    .pc-label.before { color: var(--danger);  }
+    .pc-label.after  { color: var(--success); }
+    .pc-line  { font-size: 0.82rem; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    .pc-line:last-child { border-bottom: none; font-weight: 700; }
+    .pc-line.saving { color: var(--success); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 8 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var flagged = {};
+var submitted = false;
+
+/* sections: id, isCostly, lines, reveal text */
+var sections = [
+  {
+    id: 'no-cache',
+    costly: true,
+    label: 'Install step',
+    reveal: '💸 Costly pattern. Running npm install from scratch on every build downloads all dependencies every time — typically 300–600MB transferred and 60–120 seconds of runner time. Caching node_modules with actions/cache makes this ~5 seconds after the first run. At 150 builds/day, that\'s 150 minutes/day wasted = $1.20/day = $36/month on GitHub-hosted runners ($0.008/min).',
+    lines: [
+      { cls: 'ky',  text: '    - name: Install dependencies' },
+      { cls: 'val', text: '      run: npm install' },
+      { cls: 'cmt', text: '      # no cache configuration' },
+    ]
+  },
+  {
+    id: 'large-runner',
+    costly: true,
+    label: 'Runner configuration',
+    reveal: '💸 Costly pattern. Using a 16-core (ubuntu-latest-16core) runner for linting and unit tests is overkill. Linting is single-threaded; unit tests rarely saturate more than 4 cores. GitHub-hosted 16-core runners cost $0.064/min vs $0.008/min for standard 2-core — 8× more expensive. Right-sizing to a standard runner saves ~$58/month at 150 builds/day × 10 min avg.',
+    lines: [
+      { cls: 'ky',  text: '    runs-on: ubuntu-latest-16core' },
+      { cls: 'cmt', text: '    # 16-core runner, $0.064/min' },
+    ]
+  },
+  {
+    id: 'no-path-filter',
+    costly: true,
+    label: 'Trigger configuration',
+    reveal: '💸 Costly pattern. Running the full pipeline on every push to every branch — including documentation, README, and config changes — wastes minutes on builds that can\'t affect app behaviour. Adding path filters (paths-ignore: [\'**.md\', \'docs/**\']) or triggering full builds only on pull_request targets can reduce pipeline runs by 20–40% on active repos.',
+    lines: [
+      { cls: 'ky',  text: 'on:' },
+      { cls: 'val', text: '  push:' },
+      { cls: 'val', text: '    branches: ["**"]' },
+      { cls: 'cmt', text: '  # runs on every push, all branches' },
+      { cls: 'cmt', text: '  # no path filtering' },
+    ]
+  },
+  {
+    id: 'sequential',
+    costly: false,
+    label: 'Job structure',
+    reveal: 'This is sequential but not costly by default — some jobs genuinely depend on previous steps. However, if lint, unit tests, and type-check are all independent, running them in parallel (separate jobs) can cut total wall time by 60%, which reduces runner minutes if you\'re on a concurrency-limited plan. Not always a cost issue, but worth considering for slow pipelines.',
+    lines: [
+      { cls: 'ky',  text: 'jobs:' },
+      { cls: 'val', text: '  build:' },
+      { cls: 'val', text: '    steps:' },
+      { cls: 'cmt', text: '      - lint' },
+      { cls: 'cmt', text: '      - type-check' },
+      { cls: 'cmt', text: '      - unit-test' },
+      { cls: 'cmt', text: '      - integration-test' },
+      { cls: 'cmt', text: '      # all sequential in one job' },
+    ]
+  },
+  {
+    id: 'no-docker-cache',
+    costly: true,
+    label: 'Docker build step',
+    reveal: '💸 Costly pattern. Building a Docker image without layer caching rebuilds every layer on every run — even if only the application code changed. Using docker/build-push-action with cache-from: type=gha means unchanged layers (base OS, dependencies) are reused from cache. For a typical Node.js/Python image, this reduces Docker build time from 4–6 minutes to 30–90 seconds. At 150 builds/day, that\'s 450–750 minutes saved daily.',
+    lines: [
+      { cls: 'ky',  text: '    - name: Build Docker image' },
+      { cls: 'val', text: '      run: docker build -t app:${{ github.sha }} .' },
+      { cls: 'cmt', text: '      # no --cache-from, rebuilds all layers' },
+    ]
+  },
+  {
+    id: 'artifact-retain',
+    costly: true,
+    label: 'Artifact retention',
+    reveal: '💸 Costly pattern. GitHub Actions charges for artifact storage beyond the free tier (500MB on Free, 2GB on Pro). Keeping build artifacts for 90 days on every build generates significant storage fast. Most artifacts are only useful for a few days after the build. Setting retention-days: 3 on non-release builds is a safe default that dramatically reduces storage costs.',
+    lines: [
+      { cls: 'ky',  text: '    - uses: actions/upload-artifact@v3' },
+      { cls: 'val', text: '      with:' },
+      { cls: 'val', text: '        name: build-output' },
+      { cls: 'val', text: '        path: dist/' },
+      { cls: 'cmt', text: '        # retention-days not set → defaults to 90 days' },
+    ]
+  }
+];
+
+function toggleFlag(sectionId) {
+  if (submitted) return;
+  flagged[sectionId] = !flagged[sectionId];
+  var el = document.getElementById('sec-' + sectionId);
+  if (el) {
+    el.classList.toggle('flagged', !!flagged[sectionId]);
+  }
+  updateFlagLabel();
+}
+
+function updateFlagLabel() {
+  var n = Object.values(flagged).filter(Boolean).length;
+  var btn = document.getElementById('ci-submit-btn');
+  if (btn) btn.textContent = 'Submit' + (n ? ' (' + n + ' flagged)' : '');
+}
+
+function submitCI() {
+  if (submitted) return;
+  submitted = true;
+
+  var costly = sections.filter(function(s) { return s.costly; });
+  var notCostly = sections.filter(function(s) { return !s.costly; });
+
+  var pts = 0;
+  costly.forEach(function(s) { if (flagged[s.id]) pts += 25; });
+  notCostly.forEach(function(s) { if (flagged[s.id]) pts -= 10; });
+  score = Math.max(0, pts);
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  sections.forEach(function(s) {
+    var el = document.getElementById('sec-' + s.id);
+    if (el) {
+      el.classList.add('locked', 'revealed');
+      if (s.costly) el.classList.add('flagged');
+      else el.classList.remove('flagged');
+    }
+  });
+
+  var btn = document.getElementById('ci-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitted'; }
+  document.getElementById('ci-next-btn').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🔄 CI/CD Costs</div>
+        <h2>Your test suite runs 150 times a day. What does that cost?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          CI/CD pipelines are invisible spend. Each build consumes compute minutes, storage for artifacts, and sometimes egress for dependency downloads. It adds up.
+        </p>
+        <div class="cost-calc" style="margin-bottom:16px">
+          <div class="cost-line"><span class="cost-name">GitHub Actions — Linux 2-core</span><span class="cost-amount" style="color:var(--text-muted)">$0.008/min</span></div>
+          <div class="cost-line"><span class="cost-name">GitHub Actions — Linux 4-core</span><span class="cost-amount" style="color:var(--text-muted)">$0.016/min</span></div>
+          <div class="cost-line"><span class="cost-name">GitHub Actions — Linux 16-core</span><span class="cost-amount" style="color:var(--text-muted)">$0.064/min</span></div>
+          <div class="cost-line total"><span class="cost-name">150 builds/day × 12 min × $0.008</span><span class="cost-amount">$518/month</span></div>
+        </div>
+        <div class="scenario-box">
+          A poorly configured pipeline at 150 builds/day can easily cost $800–$1,200/month. The same pipeline, well-configured, often costs under $200. In the next step you'll review a GitHub Actions workflow and flag the wasteful patterns.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Review the pipeline →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    submitted = false;
+    flagged = {};
+
+    var sectionsHTML = sections.map(function(s) {
+      var lines = s.lines.map(function(l) {
+        return '<div class="yaml-line ' + l.cls + '">' + l.text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+      }).join('');
+
+      return '<div class="yaml-section" id="sec-' + s.id + '" onclick="toggleFlag(\'' + s.id + '\')">' +
+        '<div class="yaml-lines">' + lines + '</div>' +
+        '<div class="yaml-flag-row">' +
+          '<span class="flag-hint">click to flag as wasteful</span>' +
+          '<span class="flag-badge">⚑ flagged</span>' +
+        '</div>' +
+        '<div class="yaml-reveal">' + s.reveal + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card" style="padding:0;overflow:hidden">
+        <div style="padding:20px 24px 12px">
+          <div class="step-type challenge">🔄 Pipeline Audit</div>
+          <h2 style="margin-bottom:4px">.github/workflows/ci.yml</h2>
+          <p style="color:var(--text-muted);font-size:0.85rem">Click sections to flag wasteful patterns. Submit when done — you'll see which ones are actually costly.</p>
+        </div>
+        <div class="yaml-block" style="border-radius:0;border-left:none;border-right:none">
+          <div class="yaml-header"><span>📄 .github/workflows/ci.yml</span><span>${sections.length} sections</span></div>
+          ${sectionsHTML}
+        </div>
+        <div style="padding:12px 24px 20px" class="step-actions">
+          <button class="btn btn-ghost" id="ci-submit-btn" onclick="submitCI()">Submit</button>
+          <button class="btn btn-primary" id="ci-next-btn" onclick="nextStep()" disabled>See savings →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 125;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 80)     { badge = '🏆'; headline = 'Pipeline optimizer!'; desc = 'You spotted the costly patterns. Caching, right-sizing runners, and path filters are the three highest-leverage CI fixes.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The core habits: always cache dependencies, use the smallest runner that works, and filter out non-code changes from triggering full builds.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'CI/CD costs compound with team size. A 10-person team running 150 builds/day on oversized runners burns more than many production workloads.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Track complete! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li><strong>Cache dependencies.</strong> npm install / pip install without a cache layer runs in full on every build. With caching it runs once, then takes ~5 seconds. Biggest single CI optimisation.</li>
+            <li><strong>Right-size runners.</strong> Linting and unit tests don't need 16-core runners. Use the smallest runner that keeps build time acceptable — 8× cost difference between 2-core and 16-core.</li>
+            <li><strong>Filter triggers.</strong> Don't run the full pipeline on README and docs commits. path-ignore filters or branch scoping can cut pipeline runs by 20–40%.</li>
+            <li><strong>Cache Docker layers.</strong> Rebuilding all Docker layers every run is the second most common CI waste. GitHub Actions layer caching reduces Docker build time by 60–80%.</li>
+            <li><strong>Set artifact retention.</strong> Default 90-day retention accumulates fast. Most artifacts are only useful for a few days — set retention-days: 3 on non-release builds.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
