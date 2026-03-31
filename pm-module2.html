@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 2: Unit Economics — PM Track — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .metric-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .metric-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 6px; }
+    .metric-value { font-size: 1.4rem; font-weight: 800; color: var(--text); }
+    .metric-sub   { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+    .calc-step {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .calc-step .formula { font-size: 0.88rem; color: var(--text-muted); flex: 1; font-family: monospace; }
+    .calc-step .result  { font-size: 1.1rem; font-weight: 800; color: var(--accent); min-width: 100px; text-align: right; opacity: 0; transition: opacity 0.3s; }
+    .calc-step .result.show { opacity: 1; }
+    .calc-step button   { flex-shrink: 0; }
+
+    .impact-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 12px 0; }
+    .impact-table th { background: var(--surface2); color: var(--text-muted); padding: 8px 14px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .impact-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .impact-table tr:last-child td { border-bottom: none; }
+    .impact-table .before { color: var(--text-muted); }
+    .impact-table .after  { color: var(--text); font-weight: 600; }
+    .impact-table .worse  { color: var(--danger); font-weight: 700; }
+    .impact-table .better { color: var(--success); font-weight: 700; }
+
+    .option-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .opt-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .opt-card:hover:not(.locked) { border-color: var(--primary); background: rgba(108,71,255,0.06); }
+    .opt-card.locked  { cursor: default; }
+    .opt-card.chosen  { border-color: var(--primary); background: rgba(108,71,255,0.08); }
+    .opt-title  { font-weight: 700; font-size: 0.93rem; margin-bottom: 4px; }
+    .opt-detail { font-size: 0.8rem; color: var(--text-muted); }
+    .opt-result { display: none; margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; line-height: 1.55; }
+    .opt-card.chosen .opt-result { display: block; }
+    .opt-result.good { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.25); }
+    .opt-result.ok   { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); }
+    .opt-result.bad  { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25); }
+
+    .ue-formula {
+      background: var(--surface2);
+      border-left: 3px solid var(--primary);
+      border-radius: 0 10px 10px 0;
+      padding: 14px 18px;
+      font-family: monospace;
+      font-size: 0.88rem;
+      margin: 10px 0;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 2 of 7</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var answered = false;
+var calcsDone = 0;
+var decisionMade = false;
+
+var steps = [
+  { type: 'intro' },
+  { type: 'calculator' },
+  { type: 'impact' },
+  {
+    type: 'decision',
+    points: 40,
+    options: [
+      {
+        title: '① Include video in all plans at no extra cost',
+        detail: 'Ship it free — growth and retention matter more than the marginal infra cost right now.',
+        outcome: 'ok',
+        result: 'Viable if your conversion assumption holds, but it\'s a bet. The $4,500/mo cost is real regardless of whether users use the feature. If adoption is low, you\'ve degraded your unit economics permanently. Worth modelling: how many new signups do you need to offset the cost?'
+      },
+      {
+        title: '② Charge existing customers a small add-on ($3–5/month)',
+        detail: 'Cover the cost at scale, keep it accessible.',
+        outcome: 'good',
+        result: 'At full adoption (2,000 customers × $3 = $6,000/mo), this more than covers the $4,500 cost and improves unit economics. Even at 50% adoption you break even. This is grounded in unit economics rather than assumptions about growth effects.'
+      },
+      {
+        title: '③ Gate it to the highest-paid tier only',
+        detail: 'Video is a premium feature — reserve it for enterprise customers.',
+        outcome: 'good',
+        result: 'If your top tier customers are the heavy video users anyway, concentrating the cost there makes sense. This keeps base-tier unit economics clean. The tradeoff: you may slow adoption if video turns out to be a key activation driver for all tiers.'
+      },
+      {
+        title: '④ Don\'t ship it — the cost doesn\'t justify it',
+        detail: 'Protect margins, kill the feature.',
+        outcome: 'bad',
+        result: 'Unit economics alone don\'t tell you whether to ship a feature — that\'s a product and business decision. $4,500/mo extra on $100K revenue is 4.5% — not trivial, but not catastrophic. The right question is: what does this feature do for retention and growth, and does that offset the cost?'
+      }
+    ]
+  },
+  { type: 'insight' },
+  { type: 'results' }
+];
+
+function revealCalc(idx) {
+  var el = document.getElementById('result-' + idx);
+  if (!el || el.classList.contains('show')) return;
+  el.classList.add('show');
+  document.getElementById('calc-btn-' + idx).disabled = true;
+  calcsDone++;
+  if (calcsDone >= 3) {
+    document.getElementById('calc-next-btn').disabled = false;
+  }
+}
+
+function chooseOption(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var opts = document.querySelectorAll('.opt-card');
+  opts.forEach(function(o) { o.classList.add('locked'); });
+  document.getElementById('opt-' + idx).classList.add('chosen');
+  var outcome = steps[currentStep].options[idx].outcome;
+  if (outcome === 'good') score += steps[currentStep].points;
+  else if (outcome === 'ok') score += Math.floor(steps[currentStep].points / 2);
+  updateScoreDisplay();
+  document.getElementById('dec-next-btn').disabled = false;
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  answered = false;
+  var total = steps.length - 1;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+
+  var step = steps[currentStep];
+  var c = document.getElementById('step-container');
+
+  if (step.type === 'intro') {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📊 Unit Economics</div>
+        <h2>What does your product actually cost to run?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Unit economics connects your cloud bill to your product decisions. Before adding any feature, you need to know your baseline cost per customer — otherwise you're flying blind.
+        </p>
+
+        <p style="font-weight:600;margin-bottom:10px">Here's your product snapshot for this month:</p>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Cloud bill</div>
+            <div class="metric-value">$18K</div>
+            <div class="metric-sub">per month</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Paying customers</div>
+            <div class="metric-value">2,000</div>
+            <div class="metric-sub">active subscriptions</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Monthly revenue</div>
+            <div class="metric-value">$100K</div>
+            <div class="metric-sub">$50 ARPU</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">MAU</div>
+            <div class="metric-value">1,400</div>
+            <div class="metric-sub">70% of customers</div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          In the next step, you'll calculate three unit economics metrics from these numbers. Then you'll see what happens when a new feature changes the picture.
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Calculate →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'calculator') {
+    calcsDone = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🧮 Build your cost model</div>
+        <h2>Calculate your unit economics</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Click each button to reveal the result. These are the three numbers every PM should know about their product.
+        </p>
+
+        <div class="calc-step">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px">Infrastructure cost per customer</div>
+            <div class="formula">$18,000 ÷ 2,000 customers</div>
+          </div>
+          <div class="result" id="result-0">$9.00 / customer</div>
+          <button class="btn btn-ghost" id="calc-btn-0" onclick="revealCalc(0)" style="font-size:0.82rem;padding:8px 14px">Calculate →</button>
+        </div>
+
+        <div class="calc-step">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px">Infrastructure cost per active user</div>
+            <div class="formula">$18,000 ÷ 1,400 MAU</div>
+          </div>
+          <div class="result" id="result-1">$12.86 / MAU</div>
+          <button class="btn btn-ghost" id="calc-btn-1" onclick="revealCalc(1)" style="font-size:0.82rem;padding:8px 14px">Calculate →</button>
+        </div>
+
+        <div class="calc-step">
+          <div>
+            <div style="font-weight:600;font-size:0.88rem;margin-bottom:4px">Infrastructure as % of revenue</div>
+            <div class="formula">$18,000 ÷ $100,000 × 100</div>
+          </div>
+          <div class="result" id="result-2">18%</div>
+          <button class="btn btn-ghost" id="calc-btn-2" onclick="revealCalc(2)" style="font-size:0.82rem;padding:8px 14px">Calculate →</button>
+        </div>
+
+        <div class="tip-card" style="margin-top:8px">
+          💡 <strong>Why these three numbers?</strong> Cost per customer tells you scalability. Cost per MAU tells you who's expensive to serve. Infra % of revenue tells you if your pricing model is sustainable.
+        </div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Reveal all three to continue</span>
+          <button class="btn btn-primary" id="calc-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'impact') {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">⚡ Feature impact</div>
+        <h2>A new feature changes the numbers</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Engineering just shipped <strong>video uploads</strong>. The feature adds $4,500/month to your cloud bill — primarily S3 storage and CloudFront egress. Here's what that does to your unit economics:
+        </p>
+
+        <table class="impact-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Before</th>
+              <th>After</th>
+              <th>Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Monthly cloud bill</td>
+              <td class="before">$18,000</td>
+              <td class="after">$22,500</td>
+              <td class="worse">+$4,500</td>
+            </tr>
+            <tr>
+              <td>Cost per customer</td>
+              <td class="before">$9.00</td>
+              <td class="after">$11.25</td>
+              <td class="worse">+$2.25 (+25%)</td>
+            </tr>
+            <tr>
+              <td>Cost per MAU</td>
+              <td class="before">$12.86</td>
+              <td class="after">$16.07</td>
+              <td class="worse">+$3.21 (+25%)</td>
+            </tr>
+            <tr>
+              <td>Infra as % of revenue</td>
+              <td class="before">18%</td>
+              <td class="after">22.5%</td>
+              <td class="worse">+4.5 pts</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="scenario-box">
+          Revenue is still $100K/month. You haven't added a single new customer. The unit economics got worse purely because of one feature.
+          <br><br>
+          The CPO asks: <strong>"How should we price this?"</strong>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Answer →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'decision') {
+    decisionMade = false;
+    var optsHTML = step.options.map(function(opt, i) {
+      return '<div class="opt-card" id="opt-' + i + '" onclick="chooseOption(' + i + ')">' +
+        '<div class="opt-title">' + opt.title + '</div>' +
+        '<div class="opt-detail">' + opt.detail + '</div>' +
+        '<div class="opt-result ' + opt.outcome + '">' + opt.result + '</div>' +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎭 Decision — up to ${step.points} pts</div>
+        <h2>How do you price video uploads?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          The feature is live. Your cloud bill is up $4,500/month. The CPO wants a recommendation before next week's pricing review. What do you propose?
+        </p>
+        <div class="option-cards">${optsHTML}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Pick the option you'd recommend</span>
+          <button class="btn btn-primary" id="dec-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'insight') {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>Unit economics as a product habit</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">The goal isn't to have a perfect formula — it's to build the habit of connecting product decisions to cost before they ship.</p>
+
+        <p style="font-weight:600;margin-bottom:8px">The three formulas to keep handy:</p>
+        <div class="ue-formula">Cost per customer = Total cloud bill ÷ Paying customers</div>
+        <div class="ue-formula">Cost per MAU      = Total cloud bill ÷ Monthly Active Users</div>
+        <div class="ue-formula">Infra % of revenue = Cloud bill ÷ Revenue × 100</div>
+
+        <div class="tip-card" style="margin-top:16px">
+          <strong>📋 Before any feature goes on the roadmap, ask Engineering:</strong>
+          <ul>
+            <li><strong>"What's the estimated monthly infra cost at our current scale?"</strong> — storage, compute, egress separately if possible.</li>
+            <li><strong>"How does it scale?"</strong> — linearly with users? with data volume? with requests? Video and storage-heavy features tend to scale super-linearly.</li>
+            <li><strong>"What's the cost at 3× our current usage?"</strong> — features that seem cheap at 2K customers can change the picture at 10K.</li>
+          </ul>
+        </div>
+
+        <div class="scenario-box" style="margin-top:16px">
+          <strong>Note on benchmarks:</strong> You'll often hear "infra should be under 20% of revenue for SaaS." This is a rough rule of thumb from industry surveys — not a universal standard. The right number depends on your margin targets, growth stage, and business model. Use it as a flag, not a rule.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'results') {
+    var maxScore = 40;
+    var pct = Math.round((score / maxScore) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)      { badge = '🏆'; headline = 'Unit economics mindset unlocked!'; desc = 'You know your baseline numbers and how to think about feature cost in terms of pricing impact. That\'s the loop.'; }
+    else if (pct >= 40) { badge = '🎯'; headline = 'Good instincts!';                  desc = 'The core habit is there. Review the pricing decision — both ② and ③ are defensible, the key is connecting the cost to a revenue line.'; }
+    else                { badge = '📚'; headline = 'Keep building!';                   desc = 'The insight here is that unit economics isn\'t about saying no to features — it\'s about understanding their cost so you can price and scope them correctly.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Know your cost per customer and infra % of revenue before any major feature discussion.</li>
+            <li>A new feature that costs $4,500/mo on $100K revenue is a 4.5% margin impact — model it before shipping.</li>
+            <li>Ask Engineering: estimated cost at current scale, and at 3× scale.</li>
+            <li>Storage and media features (video, images) tend to scale super-linearly — they compound with data volume and egress.</li>
+            <li>Infra % benchmarks are rough rules of thumb, not universal standards. Context matters.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
