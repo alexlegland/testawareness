@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 4: Tagging & Team Accountability — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── Bill summary dashboard ── */
+    .bill-dashboard {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .bill-dashboard-header {
+      background: #17172a;
+      padding: 10px 18px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bill-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .bill-row:last-child { border-bottom: none; }
+    .bill-row .label { color: var(--text-muted); }
+    .bill-row .value { font-weight: 700; }
+    .bill-row .bar-wrap { flex: 1; margin: 0 16px; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .bill-row .bar-fill { height: 100%; border-radius: 99px; }
+    .bill-row.total .label { color: var(--text); font-weight: 600; }
+    .bill-row.total .value { font-size: 1.1rem; color: var(--text); }
+    .tag-ok   { color: var(--success); }
+    .tag-warn { color: var(--warning); }
+    .tag-none { color: var(--danger); }
+
+    /* ── Audit grid ── */
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .audit-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-height: 110px;
+      position: relative;
+    }
+    .audit-card:not(.revealed):hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+    }
+    .audit-card.revealed { cursor: default; }
+    .audit-card.revealed.ok   { border-color: var(--success); background: rgba(34,197,94,0.06); }
+    .audit-card.revealed.warn { border-color: var(--warning); background: rgba(245,158,11,0.06); }
+    .audit-card.revealed.bad  { border-color: var(--danger);  background: rgba(239,68,68,0.06); }
+    .audit-service  { font-weight: 700; font-size: 0.88rem; margin-bottom: 4px; }
+    .audit-cost     { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px; }
+    .audit-prompt   { font-size: 0.75rem; color: var(--primary); font-weight: 600; }
+    .audit-result   { display: none; }
+    .audit-card.revealed .audit-prompt { display: none; }
+    .audit-card.revealed .audit-result { display: block; }
+    .audit-status   { font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; }
+    .audit-tags     { font-size: 0.72rem; color: var(--text-muted); line-height: 1.6; font-family: monospace; }
+
+    /* ── Taxonomy chips ── */
+    .chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .tag-chip {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 99px;
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: monospace;
+    }
+    .tag-chip:hover:not(.disabled) { border-color: var(--primary); }
+    .tag-chip.selected { border-color: var(--primary); background: rgba(108,71,255,0.12); color: var(--primary); }
+    .tag-chip.disabled { cursor: default; opacity: 0.6; }
+    .chip-reveals { margin-top: 14px; display: none; }
+    .chip-reveals.show { display: block; }
+    .chip-reveal-item {
+      background: var(--surface2);
+      border-left: 3px solid var(--border);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      font-size: 0.83rem;
+    }
+    .chip-reveal-item.high  { border-color: var(--success); }
+    .chip-reveal-item.med   { border-color: var(--warning); }
+    .chip-reveal-item.low   { border-color: var(--danger); }
+    .chip-reveal-item strong { font-family: monospace; color: var(--accent); }
+
+    /* ── Decision cards ── */
+    .decision-cards { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+    .dec-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .dec-card:hover:not(.locked) { border-color: var(--primary); }
+    .dec-card.locked  { cursor: default; }
+    .dec-card.chosen  { border-color: var(--primary); }
+    .dec-card.chosen.good { border-color: var(--success); background: rgba(34,197,94,0.06); }
+    .dec-card.chosen.bad  { border-color: var(--danger);  background: rgba(239,68,68,0.06); }
+    .dec-card.chosen.ok   { border-color: var(--warning); background: rgba(245,158,11,0.06); }
+    .dec-title  { font-weight: 700; font-size: 0.92rem; margin-bottom: 4px; }
+    .dec-sub    { font-size: 0.8rem; color: var(--text-muted); }
+    .dec-result { display: none; margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; line-height: 1.55; background: rgba(0,0,0,0.2); }
+    .dec-card.chosen .dec-result { display: block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 4 of 7</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var auditRevealed = 0;
+var chipsSelected = [];
+var chipsDone = false;
+var decisionMade = false;
+
+var TOTAL_AUDIT = 6;
+var TOTAL_CHIPS = 3;
+
+var auditItems = [
+  {
+    name: 'API Gateway (prod)',
+    cost: '$1,200/mo',
+    status: 'ok',
+    statusLabel: '✅ Well tagged',
+    tags: 'team=payments\nenv=prod\nfeature=checkout',
+    note: 'Clear ownership. Any cost spike here goes straight to the payments team.'
+  },
+  {
+    name: 'EC2 Batch Workers',
+    cost: '$4,800/mo',
+    status: 'warn',
+    statusLabel: '⚠️ Partial tags',
+    tags: 'env=prod\n(no team, no feature)',
+    note: 'You know this is production, but you don\'t know which team owns it or what product feature it supports.'
+  },
+  {
+    name: 'S3 Media Bucket',
+    cost: '$9,200/mo',
+    status: 'bad',
+    statusLabel: '❌ No tags',
+    tags: '(none)',
+    note: 'Largest storage cost on the bill. Nobody can tell you which product area this serves or who is responsible for the data in it.'
+  },
+  {
+    name: 'RDS Aurora Cluster',
+    cost: '$3,400/mo',
+    status: 'warn',
+    statusLabel: '⚠️ Partial tags',
+    tags: 'team=platform\n(no feature, no env)',
+    note: 'You know it\'s the platform team, but you can\'t split prod vs. staging costs — and staging databases often run 24/7 by mistake.'
+  },
+  {
+    name: 'Lambda Functions (×47)',
+    cost: '$2,100/mo',
+    status: 'warn',
+    statusLabel: '⚠️ Mixed — 38/47 tagged',
+    tags: 'team, env, feature (38 functions)\n(9 functions have no tags)',
+    note: 'Most functions are tagged, but 9 untagged ones account for ~$600/mo. Small but compounds at scale.'
+  },
+  {
+    name: 'CloudFront Distribution',
+    cost: '$11,700/mo',
+    status: 'bad',
+    statusLabel: '❌ No tags',
+    tags: '(none)',
+    note: 'Second biggest cost on the bill, all egress. Zero attribution. If the CFO asks what drove the CDN spike this month, you have nothing.'
+  }
+];
+
+var chipOptions = [
+  { key: 'team', level: 'high',  label: 'team=',     reveal: '<strong>team</strong> — Essential. Without it, you can never attribute a resource to an owning team. Almost every FinOps cost allocation framework starts here.' },
+  { key: 'env',  level: 'high',  label: 'env=',      reveal: '<strong>env</strong> — Critical for separating prod costs from dev/staging. Staging environments that run 24/7 are one of the most common sources of invisible waste.' },
+  { key: 'feat', level: 'high',  label: 'feature=',  reveal: '<strong>feature</strong> or <strong>product</strong> — High PM value. This is what lets you connect your cloud bill to a specific roadmap item or product area.' },
+  { key: 'cc',   level: 'med',   label: 'cost-center=', reveal: '<strong>cost-center</strong> — Useful for finance chargebacks in large orgs. Often overlaps with <strong>team</strong>. Worth adding if your company does internal billing.' },
+  { key: 'ver',  level: 'low',   label: 'version=',  reveal: '<strong>version</strong> — Useful for deployment tracking but low value for cost allocation. Rarely changes cost attribution.' },
+  { key: 'cbv',  level: 'low',   label: 'created-by=', reveal: '<strong>created-by</strong> — Who created a resource doesn\'t tell you who owns its ongoing cost. Usually not a useful allocation dimension.' }
+];
+
+function revealAudit(idx) {
+  var card = document.getElementById('audit-' + idx);
+  if (!card || card.classList.contains('revealed')) return;
+  card.classList.add('revealed', auditItems[idx].status);
+  auditRevealed++;
+  if (auditRevealed >= TOTAL_AUDIT) {
+    document.getElementById('audit-next-btn').disabled = false;
+  }
+}
+
+function toggleChip(idx) {
+  if (chipsDone) return;
+  var chip = document.getElementById('chip-' + idx);
+  var alreadySelected = chipsSelected.indexOf(idx) !== -1;
+  if (alreadySelected) {
+    chipsSelected = chipsSelected.filter(function(i) { return i !== idx; });
+    chip.classList.remove('selected');
+  } else {
+    if (chipsSelected.length >= TOTAL_CHIPS) return;
+    chipsSelected.push(idx);
+    chip.classList.add('selected');
+  }
+  document.getElementById('chip-count').textContent = chipsSelected.length + ' / ' + TOTAL_CHIPS + ' selected';
+  document.getElementById('chip-confirm-btn').disabled = chipsSelected.length !== TOTAL_CHIPS;
+}
+
+function confirmChips() {
+  if (chipsSelected.length !== TOTAL_CHIPS || chipsDone) return;
+  chipsDone = true;
+  document.querySelectorAll('.tag-chip').forEach(function(c) { c.classList.add('disabled'); });
+  document.getElementById('chip-confirm-btn').disabled = true;
+
+  var reveals = document.getElementById('chip-reveals');
+  reveals.innerHTML = '';
+  chipOptions.forEach(function(opt, i) {
+    var div = document.createElement('div');
+    div.className = 'chip-reveal-item ' + opt.level;
+    div.innerHTML = opt.reveal;
+    reveals.appendChild(div);
+  });
+  reveals.classList.add('show');
+
+  var recommended = document.getElementById('chip-recommended');
+  recommended.style.display = 'block';
+
+  document.getElementById('chip-next-btn').disabled = false;
+}
+
+function chooseDecision(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var outcomes = ['good', 'bad', 'ok'];
+  var pts = [60, 0, 30];
+  score += pts[idx];
+  updateScore();
+  document.querySelectorAll('.dec-card').forEach(function(c) { c.classList.add('locked'); });
+  var chosen = document.getElementById('dec-' + idx);
+  chosen.classList.add('chosen', outcomes[idx]);
+  document.getElementById('dec-next-btn').disabled = false;
+}
+
+function updateScore() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 5;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">📊 FinOps Report</div>
+        <h2>Your bill. You can't explain it.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          The FinOps team sent you the weekly cost report. The CFO has one question: <strong>"Which product area owns the $18K compute spike this month?"</strong>
+        </p>
+
+        <div class="bill-dashboard">
+          <div class="bill-dashboard-header">📋 Cloud Cost Attribution — This Month</div>
+          <div class="bill-row total">
+            <span class="label">Total cloud bill</span>
+            <span class="value">$42,300 / month</span>
+          </div>
+          <div class="bill-row">
+            <span class="label tag-ok">✅ Tagged (attributable)</span>
+            <div class="bar-wrap"><div class="bar-fill" style="width:26%;background:var(--success)"></div></div>
+            <span class="value tag-ok">$10,900</span>
+          </div>
+          <div class="bill-row">
+            <span class="label tag-none">❌ Untagged (unknown)</span>
+            <div class="bar-wrap"><div class="bar-fill" style="width:74%;background:var(--danger)"></div></div>
+            <span class="value tag-none">$31,400</span>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          74% of your cloud bill has no owner. The $18K compute spike? Somewhere in the $31,400 you can't explain.
+          <br><br>
+          <strong>Your answer to the CFO: "I don't know."</strong>
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Run the audit →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    auditRevealed = 0;
+    var cards = auditItems.map(function(item, i) {
+      return '<div class="audit-card" id="audit-' + i + '" onclick="revealAudit(' + i + ')">' +
+        '<div class="audit-service">' + item.name + '</div>' +
+        '<div class="audit-cost">' + item.cost + '</div>' +
+        '<div class="audit-prompt">Click to reveal tag status →</div>' +
+        '<div class="audit-result">' +
+          '<div class="audit-status">' + item.statusLabel + '</div>' +
+          '<div class="audit-tags">' + item.tags.replace(/\n/g, '<br>') + '</div>' +
+          '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;line-height:1.5">' + item.note + '</div>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Tag Audit</div>
+        <h2>What's actually tagged?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Click each service to reveal its tag status. These are the 6 main cost lines on this month's bill.
+        </p>
+        <div class="audit-grid">${cards}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Reveal all 6 to continue</span>
+          <button class="btn btn-primary" id="audit-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    chipsSelected = [];
+    chipsDone = false;
+    var chips = chipOptions.map(function(opt, i) {
+      return '<div class="tag-chip" id="chip-' + i + '" onclick="toggleChip(' + i + ')">' + opt.label + '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🏷️ Taxonomy Builder</div>
+        <h2>Pick the 3 most important tag dimensions</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          Your eng team is setting up a tagging policy from scratch. As the PM, which 3 tag keys would you advocate for first?
+        </p>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px">There is no universal "correct" answer — this shows what different choices enable.</p>
+
+        <div class="chip-grid">${chips}</div>
+        <p id="chip-count" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">0 / 3 selected</p>
+
+        <button class="btn btn-ghost" id="chip-confirm-btn" onclick="confirmChips()" disabled>See what each enables →</button>
+
+        <div class="chip-reveals" id="chip-reveals"></div>
+
+        <div id="chip-recommended" style="display:none;margin-top:16px;">
+          <div class="tip-card">
+            <strong>Common starting point:</strong> Most FinOps teams recommend <code style="background:rgba(108,71,255,0.15);padding:2px 6px;border-radius:4px">team</code>, <code style="background:rgba(108,71,255,0.15);padding:2px 6px;border-radius:4px">env</code>, and <code style="background:rgba(108,71,255,0.15);padding:2px 6px;border-radius:4px">feature</code> (or <code style="background:rgba(108,71,255,0.15);padding:2px 6px;border-radius:4px">product</code>) as a minimum viable set — not because other dimensions don't matter, but because these three answer the most common attribution questions. Different orgs use different taxonomies.
+          </div>
+        </div>
+
+        <div class="step-actions" style="margin-top:16px">
+          <span></span>
+          <button class="btn btn-primary" id="chip-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    decisionMade = false;
+    var decisions = [
+      {
+        title: '① Enforce at deployment: CI/CD rejects resources without required tags',
+        sub: 'Resources without team, env, and feature tags fail the pipeline.',
+        outcome: 'good',
+        result: 'This is a common and effective approach. Preventing untagged resources at creation time is far cheaper than retroactive cleanup. The tradeoff: it requires engineering buy-in and a rollout period — some teams use "warn but don\'t block" mode first to reduce friction during adoption.'
+      },
+      {
+        title: '② Each team self-reports cost allocation monthly in a shared spreadsheet',
+        sub: 'Manual process, no tooling changes required.',
+        outcome: 'bad',
+        result: 'Manual processes tend to degrade quickly — especially voluntary ones. Self-reporting is also inaccurate by nature: teams tend to undercount their costs, and the data becomes unreliable within a quarter. This approach doesn\'t fix the root cause.'
+      },
+      {
+        title: '③ FinOps team tags resources retroactively each month',
+        sub: 'Dedicated team does the cleanup after the fact.',
+        outcome: 'ok',
+        result: 'Retroactive tagging works short-term but doesn\'t scale. It takes significant manual effort, is often inaccurate (especially for shared infrastructure), and leaves the underlying problem untouched. Better than nothing, but the cost of this cleanup adds up.'
+      }
+    ];
+
+    var decCards = decisions.map(function(d, i) {
+      return '<div class="dec-card" id="dec-' + i + '" onclick="chooseDecision(' + i + ')">' +
+        '<div class="dec-title">' + d.title + '</div>' +
+        '<div class="dec-sub">' + d.sub + '</div>' +
+        '<div class="dec-result">' + d.result + '</div>' +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">⚙️ Decision — up to 60 pts</div>
+        <h2>Who owns tagging enforcement?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Your team has no tagging policy. The FinOps team is asking you — as PM — to help drive one. Which approach do you advocate for?
+        </p>
+        <div class="decision-cards">${decCards}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Pick the approach you'd push for</span>
+          <button class="btn btn-primary" id="dec-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 4) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>Tagging is a product problem, not just an ops problem</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">PMs often think of tagging as an engineering concern. But tagging is what lets you connect your roadmap to your cost — which is a product concern.</p>
+
+        <p style="font-weight:600;margin-bottom:10px">What good tagging enables:</p>
+
+        <div class="cost-calc" style="margin-bottom:16px">
+          <div class="cost-line"><span class="cost-name">Cost by team</span><span class="cost-amount" style="color:var(--success);font-size:0.85rem">Answer: "Which team owns the spike?"</span></div>
+          <div class="cost-line"><span class="cost-name">Cost by env</span><span class="cost-amount" style="color:var(--success);font-size:0.85rem">Answer: "Is staging running 24/7 by mistake?"</span></div>
+          <div class="cost-line"><span class="cost-name">Cost by feature</span><span class="cost-amount" style="color:var(--success);font-size:0.85rem">Answer: "What did the video feature actually cost?"</span></div>
+        </div>
+
+        <div class="tip-card">
+          <strong>📋 What a PM can do right now:</strong>
+          <ul>
+            <li>Ask Engineering: "Do our resources have team, env, and feature tags?" — one conversation, real answer in minutes.</li>
+            <li>Propose adding tagging requirements to your team's definition of done for new infrastructure.</li>
+            <li>Use tagging data when it exists: if you ship a feature and ask "what did that cost?" — the answer should come from tags, not estimates.</li>
+          </ul>
+        </div>
+
+        <div class="scenario-box" style="margin-top:16px">
+          <strong>What tagging doesn't fix:</strong> Shared infrastructure (a database used by 4 features) still requires allocation logic — you need to decide how to split shared costs between owners. Tags give you the raw data; the allocation model is a separate decision.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 5) {
+    var max = 60;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'Tag-aware PM!'; desc = 'You understand what tagging enables and how to drive it forward. Next time the CFO asks about a cost spike, you\'ll know where to look.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'Core concept is there. The key move: push for CI/CD tag enforcement — it\'s the only approach that fixes the root cause.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Tagging is the foundation of cost attribution. Without it, you can\'t answer basic questions about where your cloud bill goes.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Untagged resources make cost attribution impossible — and attribution is the foundation of any FinOps practice.</li>
+            <li>The minimum viable tagging set most FinOps teams start with: <code>team</code>, <code>env</code>, <code>feature</code>. Different orgs extend from there.</li>
+            <li>Retroactive tagging doesn't scale. Prevention at deployment time (CI/CD gates) is the most reliable long-term approach.</li>
+            <li>Tagging enables PM-level conversations: "What did the video feature actually cost to run last quarter?" becomes answerable.</li>
+            <li>Shared infrastructure (databases, CDN) still needs allocation logic on top of tags — tags are necessary but not sufficient.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>

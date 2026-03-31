@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 3: Feature Scoping & Cost — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .spec-meter {
+      position: sticky;
+      top: 65px;
+      z-index: 50;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .spec-meter-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+    .spec-meter-bar { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .spec-meter-fill { height: 100%; border-radius: 99px; transition: width 0.4s, background 0.4s; }
+    .spec-meter-value { font-size: 1rem; font-weight: 800; min-width: 90px; text-align: right; transition: color 0.3s; }
+
+    .spec-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .spec-block-header {
+      padding: 12px 18px;
+      background: #17172a;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .spec-block-title { font-weight: 700; font-size: 0.9rem; }
+    .spec-block-status { font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; }
+    .status-tbd  { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .status-done { background: rgba(34,197,94,0.15);  color: var(--success); }
+
+    .spec-options { display: flex; flex-direction: column; gap: 0; }
+    .spec-opt {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: background 0.15s;
+    }
+    .spec-opt:last-child { border-bottom: none; }
+    .spec-opt:hover:not(.locked) { background: rgba(108,71,255,0.06); }
+    .spec-opt.locked { cursor: default; }
+    .spec-opt.chosen { background: rgba(108,71,255,0.08); border-left: 3px solid var(--primary); }
+    .spec-opt-radio {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0; margin-top: 2px;
+      transition: all 0.2s;
+    }
+    .spec-opt.chosen .spec-opt-radio { border-color: var(--primary); background: var(--primary); }
+    .spec-opt-body { flex: 1; }
+    .spec-opt-name  { font-weight: 600; font-size: 0.88rem; margin-bottom: 2px; }
+    .spec-opt-desc  { font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; }
+    .spec-opt-cost  { font-weight: 800; font-size: 0.92rem; min-width: 80px; text-align: right; flex-shrink: 0; }
+    .cost-low  { color: var(--success); }
+    .cost-med  { color: var(--warning); }
+    .cost-high { color: var(--danger);  }
+
+    .spec-reveal {
+      display: none;
+      padding: 10px 18px 14px 50px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      border-top: 1px dashed var(--border);
+      background: rgba(0,0,0,0.15);
+    }
+    .spec-opt.chosen .spec-reveal { display: block; }
+
+    .ue-impact {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .ue-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+    .ue-row:last-child { border-bottom: none; }
+    .ue-row .ue-label { color: var(--text-muted); }
+    .ue-row .ue-val   { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 3 of 7</span>
+</nav>
+
+<!-- sticky cost meter, hidden until spec step -->
+<div class="spec-meter" id="spec-meter" style="display:none">
+  <span class="spec-meter-label">Est. monthly cost</span>
+  <div class="spec-meter-bar"><div class="spec-meter-fill" id="meter-fill" style="width:0%"></div></div>
+  <span class="spec-meter-value" id="meter-value">$0/mo</span>
+</div>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var chosen = [null, null, null, null]; // index of chosen option per decision
+
+// costs in $/month
+var decisions = [
+  {
+    title: 'Activity Feed — Sync strategy',
+    desc: 'How does the feed update when a teammate does something?',
+    opts: [
+      { name: 'Real-time push (WebSockets)', desc: 'Server pushes updates instantly to all connected clients. Persistent connection per active user.', cost: 1800, costLabel: '$1,800/mo', costClass: 'cost-high', reveal: 'WebSocket connections are persistent — one open socket per active user, 24/7. At 5K DAU with average 2h sessions, you\'re maintaining tens of thousands of concurrent connections. This is the right choice when latency matters (live cursors, chat). For an activity feed, users rarely notice a 30–60s delay.' },
+      { name: 'Polling every 60 seconds',    desc: 'Client asks the server "anything new?" on a timer. Simpler infrastructure.', cost: 320, costLabel: '$320/mo', costClass: 'cost-med', reveal: 'Polling is simple and battle-tested. At 5K DAU × 1 req/min × 60min sessions, you\'re looking at ~18M requests/day — manageable on any cloud. The 60s lag is invisible to most users in an activity feed context. Twitter and many Slack features used polling for years before moving to push.' },
+      { name: 'On-demand only (user pulls)',  desc: 'Feed only updates when user manually refreshes or navigates to it.', cost: 40, costLabel: '$40/mo', costClass: 'cost-low', reveal: '45x cheaper than real-time. Works well when users don\'t expect live updates — dashboards, reports, async workflows. The tradeoff: users may miss activity unless they check manually. Depends heavily on your product\'s collaboration model.' }
+    ]
+  },
+  {
+    title: 'File Attachments — Storage & preview',
+    desc: 'Users can attach files to workspace items. How are they stored and displayed?',
+    opts: [
+      { name: 'Store + auto-transcode to web formats', desc: 'Server converts uploads (images, video, docs) to optimised web previews automatically.', cost: 950, costLabel: '$950/mo', costClass: 'cost-high', reveal: 'Transcoding is CPU-intensive. Converting a 100MB video to web format takes 2–5 min on a dedicated EC2 instance. At 10K uploads/month, you need a transcoding queue (EC2 + SQS), plus the storage for both originals and converted versions. Worth it for consumer products; often over-engineered for B2B tools.' },
+      { name: 'Store originals, browser renders', desc: 'Upload files as-is to S3/GCS. Images display natively; other files download.', cost: 180, costLabel: '$180/mo', costClass: 'cost-med', reveal: 'S3 storage for 10K uploads/month at avg 2MB = ~20GB new data/month. At $0.023/GB (S3 Standard) that\'s ~$5/mo for storage plus CloudFront egress for downloads. The $180 estimate includes egress for active file access. Simple, reliable, and covers 90% of B2B file-sharing use cases.' },
+      { name: 'External links only (no upload)', desc: 'Users paste links to Google Drive, Dropbox, etc. No file hosting.', cost: 0, costLabel: '$0/mo', costClass: 'cost-low', reveal: 'Zero infra cost, but you\'re dependent on external services being accessible and the links not expiring. Valid for early-stage products or internal tools. Breaks down when users need reliable, persistent access to files without managing their own storage.' }
+    ]
+  },
+  {
+    title: 'Search — Implementation',
+    desc: 'Users need to find content across the workspace.',
+    opts: [
+      { name: 'Dedicated search cluster (OpenSearch)', desc: 'Purpose-built search engine. Full-text, fuzzy matching, filters, ranking.', cost: 380, costLabel: '$380/mo', costClass: 'cost-high', reveal: 'OpenSearch/Elasticsearch runs as a persistent cluster (minimum 2 nodes for HA). You pay whether users search or not. Worth it when search is a core product interaction — doc management, CRM, knowledge bases. An always-on $380/mo commitment for a feature that 20% of users use daily deserves a usage conversation first.' },
+      { name: 'PostgreSQL full-text search',           desc: 'Use the database you already have. Good for structured content up to ~5M rows.', cost: 60, costLabel: '$60/mo', costClass: 'cost-med', reveal: 'PostgreSQL has built-in full-text search via tsvector/tsquery — no new infrastructure. The $60 estimate is extra RDS compute for indexing. Handles millions of rows well with proper indexing. Limitations: no fuzzy matching, weaker ranking than dedicated search. Viable for most B2B products at early-to-mid scale.' },
+      { name: 'Filter by field only (no full-text)',   desc: 'Users can filter by date, author, type — no keyword search across content.', cost: 0, costLabel: '$0/mo', costClass: 'cost-low', reveal: 'Zero extra cost. Surprisingly workable if your content is structured and users know what they\'re looking for. Doesn\'t serve "find that thing I vaguely remember" use cases. Good for v1 to validate whether users actually need full-text search before investing in it.' }
+    ]
+  },
+  {
+    title: 'Notifications — Delivery channel',
+    desc: 'How do you tell users something happened?',
+    opts: [
+      { name: 'Real-time in-app + email digest', desc: 'Instant in-app badge/toast plus a daily/weekly email summary.', cost: 260, costLabel: '$260/mo', costClass: 'cost-med', reveal: 'In-app real-time notifications require a notification delivery layer (often reuses the same WebSocket infra as activity sync). Email via SES at 5K users × 30 emails/month = 150K emails ≈ $15/mo. The $260 estimate includes notification storage, delivery infra, and email. Standard for B2B SaaS.' },
+      { name: 'Email only (digest or immediate)',  desc: 'No in-app notifications. All alerts go to email.', cost: 35, costLabel: '$35/mo', costClass: 'cost-low', reveal: 'SES costs ~$0.10 per 1,000 emails. 5K users × 70 emails/month = 350K emails ≈ $35/mo. Simple to build, zero real-time infra. The tradeoff: users need to context-switch to email. Works better for async workflows than real-time collaboration.' },
+      { name: 'In-app only (no email)',            desc: 'Notifications only inside the product. No external delivery.', cost: 8, costLabel: '$8/mo', costClass: 'cost-low', reveal: 'Minimal cost — just storing and serving notification records from your existing DB. The tradeoff: users miss activity when they\'re not logged in. Common for internal tools where users are always in the product. Not ideal for async products where users check in periodically.' }
+    ]
+  }
+];
+
+var MAX_COST = 3390; // sum of all highest options
+
+function totalCost() {
+  var t = 0;
+  chosen.forEach(function(c, i) {
+    if (c !== null) t += decisions[i].opts[c].cost;
+  });
+  return t;
+}
+
+function updateMeter() {
+  var cost = totalCost();
+  var pct = Math.min(Math.round((cost / MAX_COST) * 100), 100);
+  var fill = document.getElementById('meter-fill');
+  var val  = document.getElementById('meter-value');
+  if (!fill) return;
+  fill.style.width = pct + '%';
+  var color = cost < 600 ? '#22c55e' : cost < 1500 ? '#f59e0b' : '#ef4444';
+  fill.style.background = color;
+  val.style.color = color;
+  val.textContent = '$' + cost.toLocaleString() + '/mo';
+}
+
+function pickOption(decIdx, optIdx) {
+  if (chosen[decIdx] !== null) return; // already chosen
+  chosen[decIdx] = optIdx;
+
+  // mark header done
+  var header = document.getElementById('spec-status-' + decIdx);
+  if (header) { header.className = 'spec-block-status status-done'; header.textContent = 'Done'; }
+
+  // lock all options in this block, mark chosen
+  for (var i = 0; i < decisions[decIdx].opts.length; i++) {
+    var el = document.getElementById('spec-opt-' + decIdx + '-' + i);
+    if (!el) continue;
+    el.classList.add('locked');
+    if (i === optIdx) el.classList.add('chosen');
+  }
+
+  updateMeter();
+
+  // check if all done
+  var allDone = chosen.every(function(c) { return c !== null; });
+  if (allDone) {
+    document.getElementById('spec-next-btn').disabled = false;
+    document.getElementById('spec-next-btn').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    document.getElementById('spec-meter').style.display = 'none';
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">⚙️ Spec Review</div>
+        <h2>Four words in a spec that change your cloud bill</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          "Real-time sync." "Full-text search." "Auto-preview." Each phrase in a product spec implies an infrastructure choice — and those choices have very different cost models.
+        </p>
+        <div class="scenario-box">
+          You're writing the spec for a <strong>Team Workspace</strong> feature. Engineering needs four technical decisions from you before they can scope the work. Each decision has 3 implementation options with different cost and complexity tradeoffs.
+          <br><br>
+          <strong>Your job:</strong> pick one option per decision. Watch the monthly cost estimate update as you go. At the end you'll see the unit economics impact on your product.
+        </div>
+        <div class="tip-card">
+          💡 There's no single "right" spec — the right choice depends on your product and users. The goal is to make the tradeoff visible before Engineering starts building.
+        </div>
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Open the spec →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    document.getElementById('spec-meter').style.display = 'flex';
+    // reset state
+    chosen = [null, null, null, null];
+    updateMeter();
+
+    var blocksHTML = decisions.map(function(dec, di) {
+      var optsHTML = dec.opts.map(function(opt, oi) {
+        return '<div class="spec-opt" id="spec-opt-' + di + '-' + oi + '" onclick="pickOption(' + di + ',' + oi + ')">' +
+          '<div class="spec-opt-radio"></div>' +
+          '<div class="spec-opt-body">' +
+            '<div class="spec-opt-name">' + opt.name + '</div>' +
+            '<div class="spec-opt-desc">' + opt.desc + '</div>' +
+            '<div class="spec-reveal">' + opt.reveal + '</div>' +
+          '</div>' +
+          '<div class="spec-opt-cost ' + opt.costClass + '">' + opt.costLabel + '</div>' +
+        '</div>';
+      }).join('');
+
+      return '<div class="spec-block">' +
+        '<div class="spec-block-header">' +
+          '<span class="spec-block-title">📌 ' + dec.title + '</span>' +
+          '<span class="spec-block-status status-tbd" id="spec-status-' + di + '">TBD</span>' +
+        '</div>' +
+        '<p style="padding:10px 18px 4px;font-size:0.8rem;color:var(--text-muted)">' + dec.desc + '</p>' +
+        '<div class="spec-options">' + optsHTML + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📝 Build the spec — make all 4 decisions</div>
+        <h2>Team Workspace — Technical decisions</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Pick one option per decision. The cost meter above updates as you go. Each chosen option reveals the tradeoff context.</p>
+        ${blocksHTML}
+        <div class="step-actions" style="margin-top:8px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Complete all 4 decisions to continue</span>
+          <button class="btn btn-primary" id="spec-next-btn" onclick="nextStep()" disabled>See impact →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    document.getElementById('spec-meter').style.display = 'none';
+    var cost = totalCost();
+    var arpu = 50; // $50/user/month
+    var customers = 2000;
+    var revenue = arpu * customers; // $100K
+    var currentBill = 18000;
+    var newBill = currentBill + cost;
+    var infraPct = Math.round((newBill / revenue) * 100);
+
+    // score: the lower the cost, the higher the score (max 160 pts)
+    // cheap spec: > 60% of max pts, expensive: fewer pts
+    // also reward thoughtful mid choices
+    var costPct = cost / MAX_COST;
+    var earned = Math.round((1 - costPct * 0.7) * 160);
+    earned = Math.max(40, Math.min(160, earned));
+    score = earned;
+    document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+    var recapRows = decisions.map(function(dec, di) {
+      var opt = dec.opts[chosen[di]];
+      return '<div class="ue-row"><span class="ue-label">' + dec.title.split('—')[0].trim() + '</span><span class="ue-val ' + opt.costClass + '">' + opt.costLabel + ' — ' + opt.name + '</span></div>';
+    }).join('');
+
+    var verdict, verdictColor;
+    if (infraPct <= 22)      { verdict = 'Sustainable — your spec keeps infra cost in a healthy range.'; verdictColor = 'var(--success)'; }
+    else if (infraPct <= 28) { verdict = 'Tight — this spec is manageable but leaves little margin. Consider which decisions are really necessary at launch.'; verdictColor = 'var(--warning)'; }
+    else                     { verdict = 'Risky — this spec more than doubles the infra load. You\'ll need a pricing change or a phased rollout to absorb it.'; verdictColor = 'var(--danger)'; }
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📊 Impact</div>
+        <h2>Your spec — unit economics</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Here's what your four decisions add to the bill at current scale (2,000 customers, $100K/month revenue).</p>
+
+        <div class="ue-impact">
+          ${recapRows}
+          <div class="ue-row" style="background:rgba(0,0,0,0.15)">
+            <span class="ue-label" style="font-weight:600;color:var(--text)">Feature total</span>
+            <span class="ue-val" style="font-size:1.05rem;color:var(--accent)">+$${cost.toLocaleString()}/mo</span>
+          </div>
+        </div>
+
+        <div class="ue-impact">
+          <div class="ue-row"><span class="ue-label">Cloud bill before</span><span class="ue-val">$${currentBill.toLocaleString()}/mo</span></div>
+          <div class="ue-row"><span class="ue-label">Cloud bill after</span><span class="ue-val">$${newBill.toLocaleString()}/mo</span></div>
+          <div class="ue-row"><span class="ue-label">Infra as % of revenue</span><span class="ue-val" style="color:${verdictColor}">${infraPct}%</span></div>
+          <div class="ue-row"><span class="ue-label">Cost per customer</span><span class="ue-val">$${(newBill/customers).toFixed(2)}</span></div>
+        </div>
+
+        <div class="scenario-box" style="border-color:${verdictColor}">
+          ${verdict}
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 160;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'Cost-conscious spec!'; desc = 'Your decisions show an awareness of cost vs. value tradeoffs. The cheapest option isn\'t always right — but neither is "real-time everything."'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'You\'re thinking about cost. The key habit: before writing "real-time" or "full-text search" in a spec, ask Engineering what that costs vs. the simpler alternative.'; }
+    else               { badge = '📚'; headline = 'Expensive spec!'; desc = 'Nothing wrong with a full-featured spec — as long as the cost is factored into pricing. The risk: shipping a feature that degrades unit economics permanently without a plan to offset it.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Four spec decisions can range from $88/mo to $3,390/mo — a 38× difference — for the same feature set.</li>
+            <li>"Real-time" and "full-text search" are the two highest cost-multipliers in this spec. Both have cheaper alternatives that serve most users just as well.</li>
+            <li>WebSocket connections (real-time sync, live notifications) scale with concurrent active users — not total users. High engagement = high cost.</li>
+            <li>The right choice depends on your product. An async workflow tool doesn't need real-time sync. A live collaboration tool does.</li>
+            <li>The habit: before writing any of these in a spec — real-time, full-text search, auto-transcode, push notifications — ask Engineering to cost the simpler alternative. Then decide with full information.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>

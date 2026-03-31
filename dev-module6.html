@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 6: Serverless Tradeoffs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .workload-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .wc-header {
+      background: #17172a;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .wc-icon { font-size: 1.4rem; }
+    .wc-title { font-weight: 700; font-size: 0.92rem; }
+    .wc-profile { padding: 12px 18px 0; }
+    .wc-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .wc-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+    }
+    .wc-stat strong { display: block; font-size: 1rem; font-weight: 800; color: var(--accent); }
+
+    .compute-picker { display: flex; gap: 8px; padding: 0 18px 14px; flex-wrap: wrap; }
+    .cp-btn {
+      flex: 1;
+      min-width: 100px;
+      padding: 10px 14px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .cp-btn:hover:not(:disabled) { border-color: var(--primary); background: rgba(108,71,255,0.08); }
+    .cp-btn:disabled { cursor: default; }
+    .cp-btn.correct { border-color: var(--success) !important; background: rgba(34,197,94,0.1) !important; color: var(--success) !important; }
+    .cp-btn.wrong   { border-color: var(--danger)  !important; background: rgba(239,68,68,0.1)  !important; color: var(--danger)  !important; }
+
+    .wc-breakdown {
+      display: none;
+      margin: 0 18px 16px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      font-size: 0.82rem;
+    }
+    .wc-breakdown.show { display: block; }
+    .bd-row {
+      display: flex;
+      align-items: flex-start;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .bd-row:last-child { border-bottom: none; }
+    .bd-model { font-weight: 700; min-width: 110px; }
+    .bd-cost  { font-weight: 800; min-width: 90px; color: var(--accent); }
+    .bd-why   { color: var(--text-muted); flex: 1; line-height: 1.5; }
+    .bd-row.winner { background: rgba(34,197,94,0.05); }
+    .winner-tag { font-size: 0.65rem; font-weight: 700; background: rgba(34,197,94,0.15); color: var(--success); padding: 2px 8px; border-radius: 99px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 6 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var answered = 0;
+
+var workloads = [
+  {
+    id: 'resize',
+    icon: '🖼️',
+    title: 'Image resize on upload',
+    stats: [
+      { label: 'Invocations', value: '50K/day' },
+      { label: 'Avg duration', value: '400ms' },
+      { label: 'Memory', value: '512MB' },
+      { label: 'Pattern', value: 'Burst on upload' }
+    ],
+    correct: 'lambda',
+    breakdown: [
+      { model: 'Lambda', cost: '$11/mo', winner: true, why: '50K × 30d = 1.5M invocations. $0.20/1M = $0.30 req cost + compute: 1.5M × 0.4s × 0.5GB × $0.0000166667 = ~$5. Total ~$11/mo. Scales to zero when no uploads. Perfect fit.' },
+      { model: 'EC2 t3.small', cost: '$15/mo', winner: false, why: 'Slightly cheaper than Lambda at this volume, but sized for peak — idles 80% of the time. Also doesn\'t auto-scale: burst uploads could queue.' },
+      { model: 'Containers (Fargate)', cost: '$22/mo', winner: false, why: 'More overhead than needed for short-burst invocations. Fargate has a minimum billing of 1 minute even for 400ms tasks.' }
+    ],
+    insight: 'Lambda wins for bursty, short-lived, event-driven work. The cost scales directly with invocations — zero traffic = zero cost.'
+  },
+  {
+    id: 'worker',
+    icon: '⚙️',
+    title: 'Queue worker (continuous)',
+    stats: [
+      { label: 'Utilisation', value: '85% CPU avg' },
+      { label: 'Runtime', value: '24/7' },
+      { label: 'Memory', value: '4GB needed' },
+      { label: 'Pattern', value: 'Steady, sustained' }
+    ],
+    correct: 'ec2',
+    breakdown: [
+      { model: 'Lambda', cost: '$180+/mo', winner: false, why: 'Lambda has a 15-minute max execution timeout. A continuous worker can\'t run on Lambda. If you tried to work around this with repeated invocations, costs balloon fast at 85% utilisation.' },
+      { model: 'EC2 t3.xlarge', cost: '$120/mo', winner: true, why: '4 vCPU, 16GB RAM, running 24/7. Predictable, cost-efficient for sustained workloads. Use a Reserved instance for 1 year = ~$75/mo (37% savings).' },
+      { model: 'Containers (ECS)', cost: '$130/mo', winner: false, why: 'Valid choice, slightly more expensive than EC2 for a single sustained worker. Better if you need multiple workers with easy horizontal scaling.' }
+    ],
+    insight: 'Lambda is wrong for continuous workloads — 15min timeout, and the pricing model charges per invocation + duration, not per hour. EC2 or containers win for sustained, high-utilisation compute.'
+  },
+  {
+    id: 'api',
+    icon: '🌐',
+    title: 'Variable-traffic REST API',
+    stats: [
+      { label: 'Traffic', value: '0–800 req/sec' },
+      { label: 'Avg latency', value: '120ms' },
+      { label: 'Memory', value: '256MB' },
+      { label: 'Pattern', value: 'Business hours peak, quiet nights' }
+    ],
+    correct: 'lambda',
+    breakdown: [
+      { model: 'Lambda', cost: '$35/mo', winner: true, why: 'At avg 200 req/sec × 86,400s/day × 30d = 518M req/mo. $0.20/1M = $104 req cost + compute (256MB, 120ms avg) = ~$31. Total ~$35/mo. Scales to zero at night automatically.' },
+      { model: 'EC2 (cluster)', cost: '$180/mo', winner: false, why: 'To handle 800 req/sec peak you need ~3× t3.medium. At $60/mo each = $180/mo — and those instances idle at night. Autoscaling helps but adds complexity.' },
+      { model: 'Containers (ECS+ALB)', cost: '$95/mo', winner: false, why: 'Good option for teams that prefer containers. Scales better than EC2, but has minimum task cost even at zero traffic. Lambda still wins on pure cost for this traffic pattern.' }
+    ],
+    insight: 'Variable traffic with quiet periods strongly favours Lambda — you only pay for actual requests. The crossover where EC2 beats Lambda is roughly constant high-volume traffic with long-running request handling.'
+  }
+];
+
+function pickCompute(wlId, model) {
+  var wl = workloads.find(function(w) { return w.id === wlId; });
+  if (!wl || wl.answered) return;
+  wl.answered = true;
+
+  var correct = model === wl.correct;
+  if (correct) score += 50;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  document.querySelectorAll('[data-wl="' + wlId + '"]').forEach(function(btn) {
+    btn.disabled = true;
+    var key = btn.dataset.model;
+    if (key === wl.correct) btn.classList.add('correct');
+    else if (key === model && !correct) btn.classList.add('wrong');
+  });
+
+  var bd = document.getElementById('bd-' + wlId);
+  if (bd) bd.classList.add('show');
+
+  answered++;
+  if (answered >= workloads.length) {
+    document.getElementById('wl6-next-btn').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">⚡ Serverless Tradeoffs</div>
+        <h2>Lambda vs EC2 vs Containers — the answer depends on the workload</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">There's no universal winner. The right compute model depends on three workload characteristics:</p>
+
+        <div class="cost-calc" style="margin-bottom:16px">
+          <div class="cost-line"><span class="cost-name">⚡ Lambda</span><span class="cost-amount" style="color:var(--text-muted);font-size:0.82rem">Best for: short-lived, bursty, event-driven. Scales to zero.</span></div>
+          <div class="cost-line"><span class="cost-name">🖥️ EC2</span><span class="cost-amount" style="color:var(--text-muted);font-size:0.82rem">Best for: sustained, high-utilisation, long-running. Fixed cost.</span></div>
+          <div class="cost-line"><span class="cost-name">📦 Containers</span><span class="cost-amount" style="color:var(--text-muted);font-size:0.82rem">Best for: variable traffic, multi-service apps, need more than Lambda allows.</span></div>
+        </div>
+
+        <div class="tip-card">
+          <strong>The two questions that determine the answer:</strong>
+          <ul>
+            <li><strong>How long does each invocation run?</strong> Lambda has a 15-minute hard limit. Long-running work needs EC2 or containers.</li>
+            <li><strong>How variable is the traffic?</strong> Lambda scales to zero — great for bursty/quiet patterns. EC2 costs the same whether you're at 0% or 100% utilisation.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Match the workloads →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    answered = 0;
+    workloads.forEach(function(w) { w.answered = false; });
+
+    var cardsHTML = workloads.map(function(wl) {
+      var stats = wl.stats.map(function(s) {
+        return '<div class="wc-stat">' + s.label + '<strong>' + s.value + '</strong></div>';
+      }).join('');
+
+      var bdRows = wl.breakdown.map(function(bd) {
+        return '<div class="bd-row' + (bd.winner ? ' winner' : '') + '">' +
+          '<span class="bd-model">' + bd.model + (bd.winner ? ' <span class="winner-tag">✓ best fit</span>' : '') + '</span>' +
+          '<span class="bd-cost">' + bd.cost + '</span>' +
+          '<span class="bd-why">' + bd.why + '</span>' +
+          '</div>';
+      }).join('');
+
+      return '<div class="workload-card">' +
+        '<div class="wc-header"><span class="wc-icon">' + wl.icon + '</span><span class="wc-title">' + wl.title + '</span></div>' +
+        '<div class="wc-profile"><div class="wc-stats">' + stats + '</div></div>' +
+        '<div class="compute-picker">' +
+          '<button class="cp-btn" data-wl="' + wl.id + '" data-model="lambda"   onclick="pickCompute(\'' + wl.id + '\',\'lambda\')"  >⚡ Lambda</button>' +
+          '<button class="cp-btn" data-wl="' + wl.id + '" data-model="ec2"      onclick="pickCompute(\'' + wl.id + '\',\'ec2\')"     >🖥️ EC2</button>' +
+          '<button class="cp-btn" data-wl="' + wl.id + '" data-model="containers" onclick="pickCompute(\'' + wl.id + '\',\'containers\')">📦 Containers</button>' +
+        '</div>' +
+        '<div class="wc-breakdown" id="bd-' + wl.id + '">' + bdRows + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Workload matcher — 3 × 50 pts</div>
+        <h2>Pick the right compute model for each workload</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Choose Lambda, EC2, or Containers. Your choice reveals the cost breakdown for all three options.</p>
+        ${cardsHTML}
+        <div class="step-actions" style="margin-top:8px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Answer all 3 to continue</span>
+          <button class="btn btn-primary" id="wl6-next-btn" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 150;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 80)     { badge = '🏆'; headline = 'Serverless-savvy dev!'; desc = 'You matched workload profile to compute model correctly. The crossover points are what matter — and you know them.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key rule: bursty + short = Lambda. Sustained + long = EC2. Variable + moderate = containers.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Lambda\'s 15-minute limit and per-invocation pricing model are the two things to internalize. Everything else follows from those.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Lambda has a hard 15-minute execution limit. Any workload that runs longer can't use Lambda without architectural workarounds.</li>
+            <li>Lambda pricing: $0.20/1M requests + $0.0000166667 per GB-second. At high sustained volume, EC2 Reserved can be cheaper.</li>
+            <li>The Lambda cost crossover point varies by workload — but sustained 24/7 high-utilisation almost always favours EC2 or Reserved containers.</li>
+            <li>Lambda scales to zero automatically. If you have quiet periods (nights, weekends), Lambda saves money vs. EC2 that idles at full cost.</li>
+            <li>Containers (ECS/Fargate) are a middle ground: more control than Lambda, auto-scaling unlike EC2, but minimum task billing even at near-zero traffic.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
