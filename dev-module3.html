@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Module 3: Egress & Data Transfer — Developer Track — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .anomaly-card {
+      background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(245,158,11,0.06));
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin: 16px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .anomaly-body { flex: 1; }
+    .anomaly-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--danger); margin-bottom: 6px; }
+    .anomaly-amount { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+    .anomaly-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+    .explorer {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .explorer-bar {
+      background: #161b22;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #30363d;
+      font-size: 0.8rem;
+    }
+    .explorer-title { font-weight: 600; color: #e6edf3; }
+    .explorer-period { color: #8b949e; font-size: 0.75rem; }
+    .breadcrumb {
+      padding: 7px 16px;
+      font-size: 0.75rem;
+      color: #8b949e;
+      background: #0d1117;
+      border-bottom: 1px solid #21262d;
+    }
+    .bc-link { color: #58a6ff; cursor: pointer; }
+    .bc-link:hover { text-decoration: underline; }
+    .explorer table { width: 100%; border-collapse: collapse; }
+    .explorer th {
+      background: #161b22;
+      color: #8b949e;
+      padding: 8px 16px;
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #30363d;
+    }
+    .explorer td { padding: 11px 16px; border-bottom: 1px solid #21262d; font-size: 0.84rem; color: #c9d1d9; vertical-align: middle; }
+    .explorer tr:last-child td { border-bottom: none; }
+    .erow { cursor: pointer; transition: background 0.12s; }
+    .erow:hover { background: rgba(88,166,255,0.05); }
+    .erow.hot { background: rgba(239,68,68,0.06); }
+    .erow.hot:hover { background: rgba(239,68,68,0.1); }
+    .erow.dim { opacity: 0.4; pointer-events: none; }
+    .svc { font-weight: 600; color: #e6edf3; }
+    .svc-sub { font-size: 0.71rem; color: #8b949e; }
+    .mono { font-family: monospace; font-weight: 700; }
+    .badge {
+      display: inline-flex;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .badge.red    { background: rgba(239,68,68,0.2);  color: #f87171; }
+    .badge.yellow { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .badge.grey   { background: rgba(139,148,158,0.12); color: #8b949e; }
+    .explorer-hint {
+      padding: 9px 16px;
+      font-size: 0.75rem;
+      color: #8b949e;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      text-align: center;
+    }
+    .reveal-box {
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      padding: 16px;
+      font-size: 0.84rem;
+      color: #c9d1d9;
+      line-height: 1.6;
+      display: none;
+    }
+    .reveal-box.show { display: block; animation: fadeUp 0.2s ease; }
+    .reveal-box code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+
+    .fix-option {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .fix-option:hover:not(.locked) { border-color: var(--primary); }
+    .fix-option.chosen { border-color: var(--primary); background: rgba(108,71,255,0.08); }
+    .fix-option.locked { cursor: default; }
+    .fix-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+    .fix-meta { font-size: 0.8rem; color: var(--text-muted); }
+    .fix-result { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: 0.82rem; line-height: 1.55; }
+    .fix-option.chosen .fix-result { display: block; }
+    .fix-result.good { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); }
+    .fix-result.ok   { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); }
+
+    .price-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 12px 0; }
+    .price-table th { background: var(--surface2); color: var(--text-muted); padding: 8px 12px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .price-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+    .price-table tr:last-child td { border-bottom: none; }
+    .free { color: var(--success); font-weight: 700; }
+    .paid { color: var(--danger); font-weight: 700; }
+    .mid  { color: var(--warning); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 3 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+/* ── state ── */
+let currentStep = 0;
+let score = 0;
+let answered = false;
+let investPhase = 0; // 0=services, 1=transfer types, 2=root cause
+let fixChosen = -1;
+
+const steps = [
+  { type: 'alert' },
+  { type: 'investigate' },
+  { type: 'fix' },
+  { type: 'quiz',
+    points: 20,
+    question: 'Within AWS, which data transfer is free?',
+    options: [
+      { text: 'S3 → EC2 within the same AWS region', correct: true },
+      { text: 'S3 → EC2 in a different AWS region', correct: false },
+      { text: 'EC2 → internet (any region)', correct: false },
+      { text: 'EC2 in us-east-1 → EC2 in eu-west-1', correct: false },
+    ],
+    feedback: {
+      correct: '✅ Correct. S3 to EC2 within the same region is free on AWS — this is why co-locating compute and storage in the same region is a standard FinOps practice. Cross-region, cross-AZ, and internet egress all have costs.',
+      wrong: '❌ S3 → EC2 within the same AWS region is free. Cross-region transfers, cross-AZ traffic, and internet egress are all billed. Prices vary by cloud and region — check the pricing page for current rates before architecture decisions.'
+    }
+  },
+  { type: 'insight' },
+  { type: 'results' }
+];
+
+/* ── investigation ── */
+function clickService(name) {
+  if (name === 'transfer') {
+    investPhase = 1;
+    renderInvestigation();
+  } else {
+    const msgs = {
+      ec2:   'EC2 costs are up 4% — roughly in line with your instance growth. Not the culprit.',
+      rds:   'RDS costs are stable. No anomaly here.',
+      s3:    'S3 storage is growing slowly at 3% — normal for an active product.',
+      other: 'Other services (CloudWatch, Lambda, etc.) are minimal and stable.'
+    };
+    showInlineHint(msgs[name] || 'This service looks normal.');
+  }
+}
+
+function clickTransferType(name) {
+  if (name === 'cross-region') {
+    investPhase = 2;
+    renderInvestigation();
+  } else {
+    const msgs = {
+      internet: 'Internet egress is $18 — about 200 GB served to end users via your API. Normal for your traffic level.',
+      az: 'Cross-AZ traffic is $3.20 — minor, from your multi-AZ RDS setup. Expected.',
+    };
+    showInlineHint(msgs[name] || 'This transfer type looks normal.');
+  }
+}
+
+function showInlineHint(msg) {
+  let hint = document.getElementById('inline-hint');
+  if (!hint) return;
+  hint.textContent = '→ ' + msg;
+  hint.style.color = '#8b949e';
+}
+
+function renderInvestigation() {
+  const container = document.getElementById('invest-area');
+  if (!container) return;
+
+  if (investPhase === 0) {
+    container.innerHTML = `
+      <div class="explorer">
+        <div class="explorer-bar">
+          <span class="explorer-title">Cost Explorer — By Service</span>
+          <span class="explorer-period">Nov 2024 vs Oct 2024</span>
+        </div>
+        <div class="breadcrumb">All services</div>
+        <table>
+          <thead><tr><th>Service</th><th>Nov 2024</th><th>vs Oct</th><th></th></tr></thead>
+          <tbody>
+            <tr class="erow" onclick="clickService('ec2')">
+              <td><div class="svc">EC2</div><div class="svc-sub">Compute — us-east-1</div></td>
+              <td class="mono">$1,240</td><td><span class="badge yellow">▲ 4%</span></td><td style="color:#58a6ff;font-size:0.75rem">drill down</td>
+            </tr>
+            <tr class="erow" onclick="clickService('rds')">
+              <td><div class="svc">RDS</div><div class="svc-sub">Database — us-east-1</div></td>
+              <td class="mono">$560</td><td><span class="badge grey">▲ 2%</span></td><td style="color:#58a6ff;font-size:0.75rem">drill down</td>
+            </tr>
+            <tr class="erow" onclick="clickService('s3')">
+              <td><div class="svc">S3</div><div class="svc-sub">Storage — us-east-1</div></td>
+              <td class="mono">$385</td><td><span class="badge grey">▲ 3%</span></td><td style="color:#58a6ff;font-size:0.75rem">drill down</td>
+            </tr>
+            <tr class="erow hot" onclick="clickService('transfer')">
+              <td><div class="svc" style="color:#f87171">Data Transfer</div><div class="svc-sub">All regions</div></td>
+              <td class="mono" style="color:#f87171">$618</td><td><span class="badge red">▲ 3,200%</span></td><td style="color:#f87171;font-size:0.75rem;font-weight:700">⚠ anomaly</td>
+            </tr>
+            <tr class="erow" onclick="clickService('other')">
+              <td><div class="svc">Other</div><div class="svc-sub">CloudWatch, Lambda…</div></td>
+              <td class="mono">$43</td><td><span class="badge grey">▲ 1%</span></td><td style="color:#58a6ff;font-size:0.75rem">drill down</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="explorer-hint" id="inline-hint">Click a row to investigate</div>
+      </div>`;
+
+  } else if (investPhase === 1) {
+    container.innerHTML = `
+      <div class="explorer">
+        <div class="explorer-bar">
+          <span class="explorer-title">Data Transfer — Breakdown</span>
+          <span class="explorer-period">Nov 2024</span>
+        </div>
+        <div class="breadcrumb"><span class="bc-link" onclick="investPhase=0;renderInvestigation()">All services</span> › Data Transfer</div>
+        <table>
+          <thead><tr><th>Transfer type</th><th>Volume</th><th>Cost</th><th></th></tr></thead>
+          <tbody>
+            <tr class="erow" onclick="clickTransferType('internet')">
+              <td><div class="svc">Internet egress</div><div class="svc-sub">Your servers → end users</div></td>
+              <td style="color:#8b949e">~200 GB</td><td class="mono">$18</td><td style="color:#58a6ff;font-size:0.75rem">details</td>
+            </tr>
+            <tr class="erow" onclick="clickTransferType('az')">
+              <td><div class="svc">Cross-AZ</div><div class="svc-sub">Within us-east-1</div></td>
+              <td style="color:#8b949e">~320 GB</td><td class="mono">$3.20</td><td style="color:#58a6ff;font-size:0.75rem">details</td>
+            </tr>
+            <tr class="erow hot" onclick="clickTransferType('cross-region')">
+              <td><div class="svc" style="color:#f87171">Cross-region</div><div class="svc-sub" style="color:#f87171">eu-west-1 → us-east-1</div></td>
+              <td style="color:#f87171;font-weight:700">30,850 GB</td><td class="mono" style="color:#f87171">$617</td><td style="color:#f87171;font-size:0.75rem;font-weight:700">⚠ click</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="explorer-hint" id="inline-hint">Click a row to investigate</div>
+      </div>`;
+
+  } else if (investPhase === 2) {
+    container.innerHTML = `
+      <div class="explorer">
+        <div class="explorer-bar">
+          <span class="explorer-title">Cross-Region Transfer — Root Cause</span>
+          <span class="explorer-period">eu-west-1 → us-east-1</span>
+        </div>
+        <div class="breadcrumb">
+          <span class="bc-link" onclick="investPhase=0;renderInvestigation()">All services</span> ›
+          <span class="bc-link" onclick="investPhase=1;renderInvestigation()">Data Transfer</span> ›
+          Cross-region
+        </div>
+        <table>
+          <thead><tr><th>Detail</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td style="color:#8b949e">Source region</td><td class="mono">eu-west-1 (Ireland)</td></tr>
+            <tr><td style="color:#8b949e">Destination region</td><td class="mono">us-east-1 (N. Virginia)</td></tr>
+            <tr><td style="color:#8b949e">Volume transferred</td><td class="mono" style="color:#f87171">30,850 GB (≈ 30 TB)</td></tr>
+            <tr><td style="color:#8b949e">Rate (approximate)</td><td class="mono">$0.02 / GB</td></tr>
+            <tr><td style="color:#8b949e">Cost</td><td class="mono" style="color:#f87171">$617</td></tr>
+            <tr><td style="color:#8b949e">Same transfer in October</td><td class="mono" style="color:#4ade80">0 GB ($0)</td></tr>
+          </tbody>
+        </table>
+        <div class="reveal-box show">
+          Your image storage S3 bucket is in <strong>eu-west-1</strong>.<br>
+          On October 28, your team launched new image processing workers in <strong>us-east-1</strong>.<br>
+          Every image processed = downloaded cross-region. At 1 TB/day, that's <strong>$20/day</strong> in transfer alone.<br><br>
+          <strong>Root cause confirmed:</strong> compute and storage are in different regions.
+        </div>
+      </div>`;
+
+    document.getElementById('invest-next-btn').disabled = false;
+  }
+}
+
+/* ── fix ── */
+const fixes = [
+  {
+    title: '① Move the S3 bucket to us-east-1',
+    meta: 'Co-locate storage with your processing workers',
+    result: 'good',
+    text: 'Eliminates the $617/mo cross-region charge entirely. S3 → EC2 within the same region is free on AWS. One-time migration effort — S3 replication or a sync script. Best choice if your user base is predominantly US-based or if you plan to expand processing capacity in the US.'
+  },
+  {
+    title: '② Move processing workers to eu-west-1',
+    meta: 'Co-locate compute with your existing storage',
+    result: 'ok',
+    text: 'Also eliminates the transfer cost. Better if your users are primarily in Europe or if eu-west-1 is already your primary region. Requires re-deploying your processing infrastructure. Neither option is universally "better" — it depends on where your users are and your growth plan.'
+  },
+  {
+    title: '③ Keep both regions, replicate S3 data first',
+    meta: 'Set up S3 cross-region replication to us-east-1',
+    result: 'ok',
+    text: 'Replication still costs ~$0.015/GB to copy, so you\'d pay ~$450/mo instead of $617. Doesn\'t fully solve the problem — and adds operational complexity. Worth considering only if you need data in both regions for other reasons (e.g. DR, latency).'
+  }
+];
+
+function selectFix(idx) {
+  if (fixChosen !== -1) return;
+  fixChosen = idx;
+  fixes.forEach(function(_, i) {
+    const el = document.getElementById('fix-' + i);
+    el.classList.add('locked');
+    if (i === idx) el.classList.add('chosen');
+  });
+  score += fixes[idx].result === 'good' ? 40 : 20;
+  updateScoreDisplay();
+  document.getElementById('fix-next-btn').disabled = false;
+}
+
+/* ── quiz ── */
+function answerQuiz(optionIndex, stepData) {
+  if (answered) return;
+  answered = true;
+  const options  = document.querySelectorAll('.option');
+  const selected = stepData.options[optionIndex];
+  options[optionIndex].classList.add(selected.correct ? 'correct' : 'wrong', 'selected');
+  if (!selected.correct) {
+    stepData.options.forEach(function(opt, i) { if (opt.correct) options[i].classList.add('correct'); });
+  }
+  options.forEach(function(o) { o.classList.add('disabled'); });
+  const fb = document.getElementById('feedback-box');
+  if (selected.correct) {
+    score += stepData.points;
+    fb.className = 'feedback correct-fb show';
+    fb.innerHTML = '<div class="feedback-title">✅ Correct! +' + stepData.points + ' pts</div>' + stepData.feedback.correct;
+  } else {
+    fb.className = 'feedback wrong-fb show';
+    fb.innerHTML = '<div class="feedback-title">❌ Not quite!</div>' + stepData.feedback.wrong;
+  }
+  updateScoreDisplay();
+  document.getElementById('next-btn').disabled = false;
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+/* ── renderer ── */
+function renderStep() {
+  answered = false;
+  const total = steps.length - 1;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+
+  const step = steps[currentStep];
+  const c = document.getElementById('step-container');
+
+  if (step.type === 'alert') {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">⚠️ Cost Anomaly</div>
+        <h2>Egress & Data Transfer Costs</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          You receive an automated cost anomaly alert. Your cloud bill spiked this month. Your job: find the root cause by navigating the data.
+        </p>
+
+        <div class="anomaly-card">
+          <div style="font-size:2.2rem">📈</div>
+          <div class="anomaly-body">
+            <div class="anomaly-label">Cost Anomaly Detected — HIGH</div>
+            <div class="anomaly-amount">+$598 above expected spend</div>
+            <div class="anomaly-meta">Service: AWS / Data Transfer &nbsp;·&nbsp; Period: Nov 1–30, 2024 &nbsp;·&nbsp; Expected: ~$20/mo &nbsp;·&nbsp; Actual: $618</div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          In the next step you'll navigate a simplified Cost Explorer to find exactly what caused this spike. No hints — the data will tell you.
+        </div>
+
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start investigating →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'investigate') {
+    investPhase = 0;
+    fixChosen = -1;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Investigation</div>
+        <h2>Find the root cause</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">Click through the data to identify what's causing the $598 spike. Drill down until you find the exact source.</p>
+        <div id="invest-area"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Drill down until root cause is confirmed</span>
+          <button class="btn btn-primary" id="invest-next-btn" onclick="nextStep()" disabled>I found it →</button>
+        </div>
+      </div>`;
+    renderInvestigation();
+
+  } else if (step.type === 'fix') {
+    const optionsHTML = fixes.map(function(f, i) {
+      return '<div class="fix-option" id="fix-' + i + '" onclick="selectFix(' + i + ')">' +
+        '<div class="fix-title">' + f.title + '</div>' +
+        '<div class="fix-meta">' + f.meta + '</div>' +
+        '<div class="fix-result ' + f.result + '">' + f.text + '</div>' +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🛠 Fix</div>
+        <h2>How do you solve it?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Root cause confirmed: your image processing workers (us-east-1) are pulling data from your S3 bucket (eu-west-1). Pick the approach that fits your situation.
+          <br><br>
+          <span style="color:var(--text-muted);font-size:0.82rem">Context: ~70% of your users and new customers are based in the US.</span>
+        </p>
+        ${optionsHTML}
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">All three work — pick the one that fits best</span>
+          <button class="btn btn-primary" id="fix-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'quiz') {
+    const letters = ['A','B','C','D'];
+    const opts = step.options.map(function(opt, i) {
+      return '<div class="option" onclick="answerQuiz(' + i + ',steps[' + currentStep + '])">' +
+        '<div class="option-letter">' + letters[i] + '</div>' +
+        '<div class="option-text">' + opt.text + '</div></div>';
+    }).join('');
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quick fact — ${step.points} pts</div>
+        <h2>${step.question}</h2>
+        <div class="options">${opts}</div>
+        <div class="feedback" id="feedback-box"></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">One correct answer</span>
+          <button class="btn btn-primary" id="next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'insight') {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Insight</div>
+        <h2>How cloud data transfer is actually billed</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Prices below are approximate — they vary by region pair and change over time. Always check your cloud provider's current pricing page before making architecture decisions.
+        </p>
+
+        <table class="price-table">
+          <thead><tr><th>Transfer type</th><th>AWS (approx)</th><th>GCP (approx)</th><th>Azure (approx)</th></tr></thead>
+          <tbody>
+            <tr><td>Same AZ / zone</td><td class="free">Free</td><td class="free">Free</td><td class="free">Free</td></tr>
+            <tr><td>Same region, cross-AZ</td><td class="mid">~$0.01/GB</td><td class="mid">~$0.01/GB</td><td class="mid">~$0.01/GB</td></tr>
+            <tr><td>Cross-region (same cloud)</td><td class="mid">~$0.02/GB</td><td class="mid">~$0.01–0.08/GB</td><td class="mid">~$0.02/GB</td></tr>
+            <tr><td>Egress to internet</td><td class="paid">~$0.09/GB</td><td class="paid">~$0.08/GB</td><td class="paid">~$0.087/GB</td></tr>
+            <tr><td>S3/GCS/Blob → compute (same region)</td><td class="free">Free</td><td class="free">Free</td><td class="free">Free</td></tr>
+          </tbody>
+        </table>
+
+        <div class="tip-card" style="margin-top:16px">
+          <strong>🔍 Three patterns that cause unexpected egress bills:</strong>
+          <ul>
+            <li><strong>Split compute/storage</strong> — processing workers in one region pulling data from storage in another. Always co-locate compute and the data it reads.</li>
+            <li><strong>Multi-region microservices</strong> — services in different regions calling each other synchronously. Latency and cost compound.</li>
+            <li><strong>Cross-cloud or hybrid</strong> — cloud → on-prem or cloud A → cloud B. This hits internet egress rates (~$0.09/GB), not the cheaper cross-region rates.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (step.type === 'results') {
+    const maxScore = 60;
+    const pct = Math.round((score / maxScore) * 100);
+    let badge, headline, desc;
+    if (pct >= 75)      { badge = '🏆'; headline = 'Sharp investigator!'; desc = 'You found the root cause, picked a solid fix, and know the key egress fact. That\'s the full loop.'; }
+    else if (pct >= 40) { badge = '🎯'; headline = 'Good instincts!';     desc = 'You traced the spike. Review the pricing table — knowing which transfers are free vs billed is the foundation.'; }
+    else                { badge = '📚'; headline = 'Keep digging!';       desc = 'The investigation pattern is the key skill here. Try re-reading the root cause step — the data tells the whole story.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${maxScore}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>S3 → EC2 within the same AWS region is free. Cross-region is ~$0.02/GB.</li>
+            <li>Always co-locate compute with the data it reads — different regions = transfer costs.</li>
+            <li>Cost Anomaly Detection (AWS, GCP, Azure all offer this) alerts you before surprises become large bills.</li>
+            <li>Cross-cloud and cloud-to-on-prem transfers hit internet egress rates (~$0.09/GB) — the most expensive tier.</li>
+            <li>When evaluating architecture, ask: "Where does the data live, and where does it need to go?"</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
