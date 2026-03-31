@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 1: Reading the Bill Like a CFO — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .raw-bill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 14px 0;
+      font-size: 0.82rem;
+    }
+    .raw-bill-header {
+      background: #17172a;
+      padding: 8px 16px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+    }
+    .bill-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .bill-line:last-child { border-bottom: none; }
+    .bill-line .svc  { color: var(--text-muted); flex: 1; }
+    .bill-line .amt  { font-weight: 700; min-width: 80px; text-align: right; }
+    .bill-line.total { background: rgba(0,0,0,0.2); }
+    .bill-line.total .svc { color: var(--text); font-weight: 600; }
+    .bill-line.total .amt { color: var(--accent); font-size: 1rem; }
+
+    /* allocation cards */
+    .alloc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+    @media (max-width: 500px) { .alloc-grid { grid-template-columns: 1fr; } }
+    .alloc-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .alloc-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); font-weight: 700; margin-bottom: 8px; }
+    .alloc-name  { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+    .alloc-items { font-size: 0.78rem; color: var(--text-muted); line-height: 1.7; }
+    .alloc-total { font-size: 1.1rem; font-weight: 800; color: var(--accent); margin-top: 8px; }
+
+    /* board format */
+    .board-slide {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin: 14px 0;
+    }
+    .board-slide h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 14px; color: var(--text); }
+    .board-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .board-row-label { min-width: 130px; font-size: 0.85rem; font-weight: 600; }
+    .board-bar-wrap { flex: 1; height: 20px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .board-bar { height: 100%; border-radius: 99px; display: flex; align-items: center; padding-left: 10px; font-size: 0.72rem; font-weight: 700; color: white; transition: width 0.6s; }
+    .board-amount { min-width: 70px; text-align: right; font-weight: 700; font-size: 0.88rem; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .quiz-opt {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      transition: all 0.15s;
+      text-align: left;
+    }
+    .quiz-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .quiz-opt:disabled { cursor: default; }
+    .quiz-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .quiz-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08);  color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Module 1 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var quizAnswered = false;
+var decisionMade = false;
+
+function nextStep() { currentStep++; renderStep(); }
+
+function answerQuiz(idx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  var correct = idx === 2;
+  if (correct) { score += 70; }
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.quiz-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === 2) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('fb1').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function choosePresentation(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var pts = [80, 80, 0][idx];
+  score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.quiz-opt').forEach(function(b) { b.disabled = true; });
+  var outcomes = ['good','good','bad'];
+  document.getElementById('pres-opt-' + idx).classList.add(outcomes[idx] === 'good' ? 'correct' : 'wrong');
+  document.getElementById('pres-fb').style.display = 'block';
+  document.getElementById('pres-fb').innerHTML = [
+    '✅ Business-line view is exactly what a board needs. Technical service breakdowns mean nothing to a CFO. When you can say "the analytics product costs $18K/month to run and grew 22% last quarter", you\'re speaking a language that drives decisions.',
+    '✅ Trend view works well alongside the business-line breakdown. Showing spend trajectory and its relationship to revenue growth is board-level communication. The risk: without the "why" behind the trend, you\'ll get questions you can\'t answer.',
+    '❌ A raw AWS service breakdown is how engineers read the bill — not how a board does. "EC2: $34,200" doesn\'t tell a board which product generated that cost or whether it\'s justified.'
+  ][idx];
+  document.getElementById('pres-next').disabled = false;
+}
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">📊 Board Prep</div>
+        <h2>The board wants cloud costs by product line. You have the AWS bill.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Next week's board meeting. The CFO sent a note: <em>"Can someone explain why cloud costs went up 28% this quarter while revenue grew 18%?"</em>
+        </p>
+        <div class="scenario-box">
+          You have the AWS bill broken down by service. The board doesn't know what EC2, RDS, or CloudFront are — they need a business view. Your job: understand how to translate a technical bill into a board-ready presentation.
+        </div>
+        <div class="tip-card">
+          💡 <strong>The two views of cloud cost:</strong><br>
+          — <strong>Technical view:</strong> by AWS service (EC2, S3, RDS, CloudFront...) — useful for engineers<br>
+          — <strong>Business view:</strong> by product line, team, or feature — useful for boards and CFOs<br><br>
+          The translation between these requires tagging, cost allocation rules, and a shared allocation taxonomy. Without it, you can't answer the CFO's question.
+        </div>
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Open the bill →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🧮 Translation Exercise</div>
+        <h2>This month's AWS bill — $142,800</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">You've done the allocation work. Here's the raw bill and the business view side by side.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div>
+            <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:8px">AWS Services View</p>
+            <div class="raw-bill">
+              <div class="raw-bill-header"><span>Service</span><span>Cost</span></div>
+              <div class="bill-line"><span class="svc">Amazon EC2</span><span class="amt">$61,400</span></div>
+              <div class="bill-line"><span class="svc">Amazon RDS</span><span class="amt">$28,600</span></div>
+              <div class="bill-line"><span class="svc">Amazon S3</span><span class="amt">$19,200</span></div>
+              <div class="bill-line"><span class="svc">CloudFront</span><span class="amt">$14,800</span></div>
+              <div class="bill-line"><span class="svc">ElastiCache</span><span class="amt">$8,100</span></div>
+              <div class="bill-line"><span class="svc">Other</span><span class="amt">$10,700</span></div>
+              <div class="bill-line total"><span class="svc">Total</span><span class="amt">$142,800</span></div>
+            </div>
+          </div>
+          <div>
+            <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:8px">Business View (after allocation)</p>
+            <div class="raw-bill">
+              <div class="raw-bill-header"><span>Product / Team</span><span>Cost</span></div>
+              <div class="bill-line"><span class="svc">Core Product</span><span class="amt">$58,300</span></div>
+              <div class="bill-line"><span class="svc">Analytics Platform</span><span class="amt">$34,100</span></div>
+              <div class="bill-line"><span class="svc">Data Pipeline</span><span class="amt">$22,800</span></div>
+              <div class="bill-line"><span class="svc">Shared Platform</span><span class="amt">$18,400</span></div>
+              <div class="bill-line"><span class="svc">Dev / Staging</span><span class="amt">$9,200</span></div>
+              <div class="bill-line total"><span class="svc">Total</span><span class="amt">$142,800</span></div>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-weight:600;margin-bottom:10px">The CFO asks: <em>"What drove the 28% increase vs. last quarter?"</em> The analytics platform grew from $21K to $34K. Which explanation is most useful for the board?</p>
+
+        <div class="quiz-opts">
+          <button class="quiz-opt" onclick="answerQuiz(0)">A: "We scaled up EC2 and RDS capacity in the eu-west-1 region."</button>
+          <button class="quiz-opt" onclick="answerQuiz(1)">B: "Our cloud bill increased due to infrastructure scaling to support business growth."</button>
+          <button class="quiz-opt" onclick="answerQuiz(2)">C: "The Analytics Platform grew $13K/month (+62%) because we onboarded 3 enterprise customers with large data volumes. This is expected — at 8 more customers it becomes profitable per unit."</button>
+          <button class="quiz-opt" onclick="answerQuiz(3)">D: "ElastiCache and RDS costs both increased due to query volume growth."</button>
+        </div>
+
+        <div id="fb1" style="display:none" class="tip-card">
+          ✅ <strong>Option C is board-level communication.</strong> It connects the cost increase to a business event (customer onboarding), quantifies the growth, and provides context for whether it's a problem (it isn't — it's on-track). Options A and D are too technical. Option B is true but says nothing actionable.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    decisionMade = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📋 Board Slide — up to 80 pts</div>
+        <h2>How do you present this to the board?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You have one slide. Cloud spend is $142,800/month, up 28% QoQ, revenue is up 18%. Pick the format that serves the board best.</p>
+
+        <div class="quiz-opts">
+          <button class="quiz-opt" id="pres-opt-0" onclick="choosePresentation(0)">① Cost by product line, with QoQ change and cost-as-% of that product's revenue</button>
+          <button class="quiz-opt" id="pres-opt-1" onclick="choosePresentation(1)">② Spend trend chart (12 months) with revenue growth overlaid — showing the divergence</button>
+          <button class="quiz-opt" id="pres-opt-2" onclick="choosePresentation(2)">③ AWS service breakdown: EC2 $61K, RDS $29K, S3 $19K, CloudFront $15K...</button>
+        </div>
+
+        <div id="pres-fb" style="display:none;margin-top:12px;padding:12px 16px;background:rgba(0,0,0,0.2);border-radius:10px;font-size:0.82rem;line-height:1.6;color:var(--text-muted)"></div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="pres-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 150;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'CFO-ready CTO!'; desc = 'You know how to translate a technical bill into a business conversation. That\'s the skill that turns cloud cost from a threat into a talking point.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key habit: always lead with the business event, not the AWS service. "Analytics Platform grew because we onboarded enterprise customers" beats "EC2 increased" every time.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Boards and CFOs don\'t read AWS bills — they read business outcomes. Tagging + cost allocation + business framing is the translation layer.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>A board doesn't need to know what EC2 is. They need to know which product is driving cost growth and whether it's justified by business outcomes.</li>
+            <li>The translation from AWS service view to business view requires: (1) resource tagging, (2) cost allocation rules for shared infrastructure, (3) a consistent taxonomy agreed across teams.</li>
+            <li>Cost growth that's proportional to revenue growth is a good story. Cost growth that outpaces revenue growth needs a narrative — and ideally a plan.</li>
+            <li>Dev/staging costs showing up in the business view is a common board question. Having it clearly separated ("$9.2K in dev/staging, already optimising") shows control.</li>
+            <li>The best board slide: cost by product line + QoQ change + cost as % of product revenue. Three columns. One minute of conversation.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>

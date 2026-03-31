@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 4: FinOps Culture — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .maturity-levels { display:flex; flex-direction:column; gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:14px 0; }
+    .ml-row { display:flex; align-items:flex-start; gap:14px; padding:14px 18px; border-bottom:1px solid var(--border); }
+    .ml-row:last-child { border-bottom:none; }
+    .ml-level { font-size:1.6rem; flex-shrink:0; width:40px; text-align:center; }
+    .ml-body {}
+    .ml-name { font-weight:700; font-size:0.9rem; margin-bottom:3px; }
+    .ml-desc { font-size:0.8rem; color:var(--text-muted); line-height:1.5; }
+    .ml-signal { font-size:0.75rem; color:var(--text-muted); margin-top:4px; font-style:italic; }
+
+    .action-cards { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .ac-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:15px 18px; cursor:pointer; transition:all 0.15s; }
+    .ac-card:hover:not(.locked) { border-color:var(--primary); }
+    .ac-card.locked { cursor:default; }
+    .ac-card.good { border-color:var(--success); background:rgba(34,197,94,0.06); }
+    .ac-card.ok   { border-color:var(--warning); background:rgba(245,158,11,0.06); }
+    .ac-card.bad  { border-color:var(--danger);  background:rgba(239,68,68,0.06); }
+    .ac-title  { font-weight:700; font-size:0.92rem; margin-bottom:4px; }
+    .ac-sub    { font-size:0.8rem; color:var(--text-muted); }
+    .ac-reveal { display:none; margin-top:10px; padding:10px 14px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.82rem; line-height:1.6; }
+    .ac-card.good .ac-reveal,
+    .ac-card.ok   .ac-reveal,
+    .ac-card.bad  .ac-reveal { display:block; }
+
+    .ownership-map { margin:14px 0; }
+    .om-row { display:flex; gap:10px; margin-bottom:8px; align-items:flex-start; }
+    .om-role { font-weight:700; font-size:0.82rem; min-width:130px; padding-top:2px; }
+    .om-resp { font-size:0.8rem; color:var(--text-muted); line-height:1.5; flex:1; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Module 4 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var decisionMade = false;
+
+function choose(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var outcomes = ['ok','bad','good','bad'];
+  var pts      = [75, 0, 150, 0];
+  score += pts[idx];
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.ac-card').forEach(function(c) { c.classList.add('locked'); });
+  var card = document.getElementById('ac-' + idx);
+  card.classList.add(outcomes[idx]);
+  document.getElementById('dec-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🏗️ FinOps Maturity</div>
+        <h2>Nobody owns cloud costs, so nobody fixes them</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Cloud cost problems are almost always organizational before they're technical. The technical fixes are straightforward — the hard part is building accountability.</p>
+
+        <p style="font-weight:600;margin-bottom:10px">The four stages most companies go through:</p>
+
+        <div class="maturity-levels">
+          <div class="ml-row" style="background:rgba(239,68,68,0.05)">
+            <div class="ml-level">😶</div>
+            <div class="ml-body">
+              <div class="ml-name">Stage 1 — Invisible</div>
+              <div class="ml-desc">Cloud costs sit with Finance or a shared Ops account. Teams don't see their own spend. Bills arrive as surprises.</div>
+              <div class="ml-signal">Signal: "Engineering doesn't have access to the AWS billing console."</div>
+            </div>
+          </div>
+          <div class="ml-row" style="background:rgba(245,158,11,0.05)">
+            <div class="ml-level">👀</div>
+            <div class="ml-body">
+              <div class="ml-name">Stage 2 — Visible</div>
+              <div class="ml-desc">Teams can see their costs via tagging and dashboards. But there's no ownership — costs are visible, not accountable.</div>
+              <div class="ml-signal">Signal: "We have dashboards but nobody acts on them."</div>
+            </div>
+          </div>
+          <div class="ml-row" style="background:rgba(108,71,255,0.05)">
+            <div class="ml-level">🎯</div>
+            <div class="ml-body">
+              <div class="ml-name">Stage 3 — Accountable</div>
+              <div class="ml-desc">Teams own their cloud budget. Cost is a topic in sprint planning. Engineers get alerts when their service spikes.</div>
+              <div class="ml-signal">Signal: "The team lead reviews cloud spend in their monthly team meeting."</div>
+            </div>
+          </div>
+          <div class="ml-row" style="background:rgba(34,197,94,0.05)">
+            <div class="ml-level">🚀</div>
+            <div class="ml-body">
+              <div class="ml-name">Stage 4 — Optimised</div>
+              <div class="ml-desc">Cost is part of architecture decisions, design reviews, and quarterly planning. FinOps is a practice, not a project.</div>
+              <div class="ml-signal">Signal: "Engineers ask 'what does this cost at scale?' before merging the PR."</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tip-card">
+          <strong>Most companies are at Stage 1 or 2.</strong> Moving from visible to accountable is the hardest transition — it requires giving teams budget ownership, not just dashboards.
+        </div>
+
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Build the ownership model →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    decisionMade = false;
+    var opts = [
+      { title: '① Hire a dedicated FinOps engineer to manage cloud costs centrally', sub: 'One person owns the bill, tracks all teams, drives optimisations.', reveal: 'A FinOps engineer is valuable at scale ($1M+/year cloud spend), but centralising ownership creates a bottleneck — one person can\'t fix all the decisions that individual teams make every day. FinOps engineers work best when they support accountable teams, not replace them. This is a Stage 2→3 helper, not a Stage 3 destination.' },
+      { title: '② Send the AWS bill to the CTO each month and review in exec meeting', sub: 'Exec visibility drives accountability.', reveal: 'Exec visibility helps, but doesn\'t create team-level accountability. If engineers never see their own costs, executive review produces a monthly conversation without the ability to act on it. The decisions that drive cloud costs are made at the team level — that\'s where accountability needs to live.' },
+      { title: '③ Give each team a monthly cloud budget, make their spend visible in their sprint review', sub: 'Teams own their costs. Cost anomalies become team-level conversations.', reveal: 'This is the right move. Budget ownership at the team level creates genuine accountability: the team that shipped a feature that tripled their compute cost has to explain it in their sprint review. This also scales — you don\'t need a central FinOps team to review every service\'s spend manually.' },
+      { title: '④ Block cloud spend above threshold with automated kill switches', sub: 'Hard limits prevent surprises.', reveal: 'Kill switches are a last resort, not a culture. Automatically terminating resources can cause outages. The right pattern is alerting, not blocking — alert teams when they\'re 70% of budget so they can investigate, not cut their infrastructure when they hit 100%.' }
+    ];
+
+    var cards = opts.map(function(o, i) {
+      return '<div class="ac-card" id="ac-' + i + '" onclick="choose(' + i + ')">' +
+        '<div class="ac-title">' + o.title + '</div>' +
+        '<div class="ac-sub">' + o.sub + '</div>' +
+        '<div class="ac-reveal">' + o.reveal + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎯 Decision — up to 150 pts</div>
+        <h2>Your company is at Stage 2. Teams see costs but don't act on them.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You want to reach Stage 3 — accountable. Cloud spend is $120K/month across 6 teams. What's your first move?</p>
+        <div class="action-cards">${cards}</div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="dec-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 150;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'Culture-first CTO!'; desc = 'You moved accountability to where the decisions are made — the team level. That\'s the right lever.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key insight: FinOps is a team sport. Central visibility without team-level ownership produces dashboards nobody acts on.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Cloud cost culture isn\'t built with kill switches or exec reviews — it\'s built when the people making infrastructure decisions can also see the cost consequences.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>The four FinOps stages: Invisible → Visible → Accountable → Optimised. Most companies are at Stage 1 or 2. The move from Visible to Accountable is the hardest.</li>
+            <li>Accountability requires budget ownership at the team level — not just dashboards. Teams need to feel the consequence of their spending decisions.</li>
+            <li>A FinOps engineer is most valuable as an enabler of team accountability, not a central cost owner. They build the tooling, dashboards, and processes that teams use to manage their own costs.</li>
+            <li>Alert teams at 70-80% of budget, not at 100%. Early warning enables response. Hard stops cause incidents.</li>
+            <li>Cost culture builds fastest when it's tied to existing rituals (sprint reviews, architecture reviews) rather than creating new separate processes. Low friction = higher adoption.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
