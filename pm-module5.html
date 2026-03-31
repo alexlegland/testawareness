@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 5: Budget Conversations — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── Context card ── */
+    .context-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 16px 0;
+    }
+    @media (max-width: 500px) { .context-grid { grid-template-columns: 1fr; } }
+    .ctx-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .ctx-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+    .ctx-value { font-size: 0.9rem; font-weight: 600; }
+
+    /* ── Chat interface ── */
+    .chat-thread {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .chat-msg {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .chat-msg.them { flex-direction: row; }
+    .chat-msg.you  { flex-direction: row-reverse; }
+    .chat-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      color: white;
+    }
+    .chat-avatar.eng  { background: linear-gradient(135deg, #0ea5e9, #2563eb); }
+    .chat-avatar.you  { background: linear-gradient(135deg, var(--primary), var(--accent)); }
+    .chat-bubble {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      max-width: 82%;
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+    .chat-msg.you .chat-bubble {
+      background: rgba(108,71,255,0.12);
+      border-color: rgba(108,71,255,0.3);
+    }
+    .chat-sender { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+
+    /* ── Response options ── */
+    .response-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .resp-opt {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      width: 100%;
+    }
+    .resp-opt:hover:not(:disabled) { border-color: var(--primary); transform: translateX(3px); }
+    .resp-opt:disabled { cursor: default; opacity: 0.55; }
+    .resp-opt.chosen-good { border-color: var(--success); background: rgba(34,197,94,0.07); opacity: 1 !important; }
+    .resp-opt.chosen-bad  { border-color: var(--danger);  background: rgba(239,68,68,0.07);  opacity: 1 !important; }
+    .resp-opt.chosen-ok   { border-color: var(--warning); background: rgba(245,158,11,0.07); opacity: 1 !important; }
+    .resp-text { font-size: 0.88rem; font-weight: 600; line-height: 1.45; margin-bottom: 6px; }
+    .resp-reveal { font-size: 0.8rem; color: var(--text-muted); line-height: 1.55; display: none; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 8px; }
+    .resp-opt.chosen-good .resp-reveal,
+    .resp-opt.chosen-bad  .resp-reveal,
+    .resp-opt.chosen-ok   .resp-reveal { display: block; }
+
+    /* ── Score pill per turn ── */
+    .turn-score {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 99px;
+      margin-bottom: 10px;
+    }
+    .turn-score.good { background: rgba(34,197,94,0.15); color: var(--success); }
+    .turn-score.ok   { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .turn-score.bad  { background: rgba(239,68,68,0.15);  color: var(--danger); }
+
+    /* ── Fact box ── */
+    .fact-box {
+      background: var(--surface2);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      padding: 12px 16px;
+      font-size: 0.83rem;
+      line-height: 1.6;
+      margin: 10px 0;
+    }
+    .fact-box strong { color: var(--accent); }
+
+    /* ── Pattern cards ── */
+    .pattern-cards { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+    .pattern-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+    .pattern-bad  { border-left: 4px solid var(--danger); }
+    .pattern-good { border-left: 4px solid var(--success); }
+    .pattern-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin-bottom: 6px; }
+    .pattern-label.bad  { color: var(--danger); }
+    .pattern-label.good { color: var(--success); }
+    .pattern-quote { font-size: 0.88rem; font-style: italic; color: var(--text); margin-bottom: 6px; }
+    .pattern-why { font-size: 0.78rem; color: var(--text-muted); line-height: 1.55; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 5 of 7</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+
+/* turn state */
+var turnAnswered = [false, false, false];
+
+var turns = [
+  {
+    pts: 40,
+    eng: "I want to add real-time collaborative editing for Q4. Users have been asking for this for months and we\'ve done some architecture exploration. I think we can ship it in 6 weeks.",
+    options: [
+      {
+        text: '"That\'s a big infrastructure commitment — I need to see cost estimates before we can even discuss this."',
+        outcome: 'ok',
+        reveal: 'Asking for cost estimates is the right instinct, but leading with caution can put Engineering on the defensive. The conversation becomes PM-vs-Engineering before it needs to be. Cost review as a gate tends to create friction rather than shared understanding.'
+      },
+      {
+        text: '"Sounds good — if users want it and you can ship it, let\'s add it to the plan."',
+        outcome: 'bad',
+        reveal: 'Approving without understanding the cost model is the other failure mode. Real-time collaborative editing requires persistent WebSocket connections and a state synchronisation layer (Redis or similar). At 10K DAU this typically runs $3K–$12K/month depending on architecture and concurrency. That\'s a margin and pricing decision, not just an engineering one.'
+      },
+      {
+        text: '"I love the direction. Can we block 30 min this week to walk through the cost model together? I want to make sure we size the pricing conversation before we commit."',
+        outcome: 'good',
+        reveal: 'Collaborative framing. You\'re not blocking or ignoring — you\'re pulling cost into the shared design process. This keeps Engineering as a partner rather than a gatekeeper, and opens the right conversation at the right time: before architecture is finalized.'
+      }
+    ]
+  },
+  {
+    pts: 50,
+    eng: "I ran some numbers. WebSocket infrastructure plus Redis for state sync, we\'re looking at roughly $6–8K/month at our current scale. But this is a real differentiator — our main competitor just shipped it.",
+    options: [
+      {
+        text: '"$6–8K/month is too much. We need to find a cheaper architecture."',
+        outcome: 'bad',
+        reveal: 'Telling Engineering to find a cheaper architecture without product context isn\'t collaborative — it\'s a constraint without a rationale. $6–8K on $100K monthly revenue is 6–8% infra cost for a feature that could differentiate you. Whether that\'s "too much" depends on what the feature does for retention and growth — context you both need to look at together.'
+      },
+      {
+        text: '"OK, noted. Let\'s just ship it and figure out pricing later."',
+        outcome: 'ok',
+        reveal: 'Deferring the pricing conversation is a real risk. If this feature pushes your infra margin from 18% to 26%, that\'s a significant business impact. The pricing conversation is much easier to have before you ship than after customers are using it — especially if you need to add a new tier or raise prices.'
+      },
+      {
+        text: '"Good. $6–8K/month changes our unit economics. Let\'s figure out together: is this a higher tier, a usage-based add-on, or do we build it into a price increase? I don\'t want to ship it and find out 3 months later we can\'t sustain it."',
+        outcome: 'good',
+        reveal: 'You\'re connecting the infrastructure cost to a pricing decision — which is exactly the PM\'s role. This gives Engineering the context for why the cost number matters, and opens a joint problem to solve rather than a gate to pass through.'
+      }
+    ]
+  },
+  {
+    pts: 50,
+    eng: "A usage-based model makes sense to me. What if we cap it at 5 concurrent editors per document — that bounds the WebSocket connections and keeps costs predictable? We could charge per collab seat.",
+    options: [
+      {
+        text: '"The cap sounds too restrictive. Let\'s not limit it and just price higher."',
+        outcome: 'bad',
+        reveal: 'Unlimited concurrency without a cost model is how you get unpredictable bills. Architecture constraints and pricing models need to be designed together — and "price higher" without knowing what higher means isn\'t a plan. At high concurrency, WebSocket costs scale faster than linearly.'
+      },
+      {
+        text: '"Perfect, let\'s put it in the Q4 spec."',
+        outcome: 'ok',
+        reveal: 'Good direction, but worth pressure-testing the cap before committing. Does 5 concurrent editors actually serve the use cases you\'re targeting? Enterprise teams often have 10–20 people on a document simultaneously. A hard cap that frustrates users on launch is worse than a slightly higher cost model with the right UX.'
+      },
+      {
+        text: '"The cap is a good cost lever. Two things before we lock it: I want to validate 5 concurrent editors with users — enterprise teams may need more. And let\'s back-calculate pricing: if 500 teams adopt this, what does the per-seat price need to be to cover $6–8K/month?"',
+        outcome: 'good',
+        reveal: 'This connects architecture decisions (the cap) to user needs (validate the limit) to pricing viability (back-calculate from cost). You\'re helping Engineering understand why the number matters without overriding their technical judgment. That\'s the PM role in cost conversations.'
+      }
+    ]
+  }
+];
+
+function chooseResponse(turnIdx, optIdx) {
+  if (turnAnswered[turnIdx]) return;
+  turnAnswered[turnIdx] = true;
+
+  var opt = turns[turnIdx].options[optIdx];
+  var pts = opt.outcome === 'good' ? turns[turnIdx].pts : (opt.outcome === 'ok' ? Math.floor(turns[turnIdx].pts / 2) : 0);
+  score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  /* disable all options in this turn */
+  var buttons = document.querySelectorAll('.resp-opt[data-turn="' + turnIdx + '"]');
+  buttons.forEach(function(b) { b.disabled = true; });
+
+  /* reveal chosen */
+  var chosen = document.getElementById('resp-' + turnIdx + '-' + optIdx);
+  chosen.classList.add('chosen-' + opt.outcome);
+  chosen.disabled = false; /* keep it visible */
+
+  /* show score pill */
+  var pill = document.getElementById('turn-pill-' + turnIdx);
+  pill.className = 'turn-score ' + opt.outcome;
+  pill.textContent = opt.outcome === 'good' ? '+' + pts + ' pts — Best framing' : (opt.outcome === 'ok' ? '+' + pts + ' pts — Workable' : '+0 pts — Risky framing');
+  pill.style.display = 'inline-block';
+
+  /* unlock next turn or next step */
+  var nextTurn = document.getElementById('turn-' + (turnIdx + 1));
+  if (nextTurn) {
+    nextTurn.style.display = 'block';
+    nextTurn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    document.getElementById('convo-next-btn').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 5;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">💬 Conversation Lab</div>
+        <h2>Talk about cost without being the villain</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Q4 planning. Marcus Chen, your engineering lead, wants to add real-time collaborative editing to the roadmap. You need to navigate a 3-turn conversation — without blocking everything for cost, or ignoring it entirely.
+        </p>
+
+        <div class="context-grid">
+          <div class="ctx-item">
+            <div class="ctx-label">Feature</div>
+            <div class="ctx-value">Real-time collaborative editing</div>
+          </div>
+          <div class="ctx-item">
+            <div class="ctx-label">Current cloud bill</div>
+            <div class="ctx-value">$18K/month (18% of revenue)</div>
+          </div>
+          <div class="ctx-item">
+            <div class="ctx-label">Estimated infra cost</div>
+            <div class="ctx-value">$6–8K/month at current scale</div>
+          </div>
+          <div class="ctx-item">
+            <div class="ctx-label">Why it costs what it costs</div>
+            <div class="ctx-value">WebSocket connections + Redis state sync</div>
+          </div>
+        </div>
+
+        <div class="fact-box">
+          <strong>How real-time collab works at scale:</strong> Unlike request/response APIs, collaborative editing requires persistent WebSocket connections — one per active editor. State synchronisation (who changed what, in what order) typically uses Redis pub/sub or a similar message bus. Costs scale with concurrent active users, not just total users. Figma, Notion, and Google Docs each use different architectural approaches to this problem.
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start the conversation →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    /* Build all 3 turns, hide turn 1 and 2 until unlocked */
+    var turnsHTML = turns.map(function(turn, ti) {
+      var opts = turn.options.map(function(opt, oi) {
+        return '<button class="resp-opt" id="resp-' + ti + '-' + oi + '" data-turn="' + ti + '" onclick="chooseResponse(' + ti + ',' + oi + ')">' +
+          '<div class="resp-text">' + opt.text + '</div>' +
+          '<div class="resp-reveal">' + opt.reveal + '</div>' +
+          '</button>';
+      }).join('');
+
+      return '<div id="turn-' + ti + '" style="' + (ti > 0 ? 'display:none' : '') + '">' +
+        '<div class="chat-thread">' +
+          '<div class="chat-msg them">' +
+            '<div class="chat-avatar eng">MC</div>' +
+            '<div><div class="chat-sender">Marcus Chen · Eng Lead</div><div class="chat-bubble">' + turn.eng + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-weight:600;font-size:0.88rem;margin-bottom:8px">How do you respond? <span style="font-weight:400;color:var(--text-muted)">(up to ' + turn.pts + ' pts)</span></p>' +
+        '<div class="response-options">' + opts + '</div>' +
+        '<div id="turn-pill-' + ti + '" class="turn-score" style="display:none"></div>' +
+        (ti < turns.length - 1 ? '<div style="height:16px;border-left:2px dashed var(--border);margin-left:18px"></div>' : '') +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">💬 3-turn conversation — up to 140 pts</div>
+        <h2>Q4 planning with Marcus</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Pick your responses. Each turn unlocks after you answer. Your choices reveal what each framing does to the conversation.</p>
+        ${turnsHTML}
+        <div class="step-actions" style="margin-top:20px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Complete all 3 turns to continue</span>
+          <button class="btn btn-primary" id="convo-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 Patterns</div>
+        <h2>What separates the framings</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">The same information — a $6–8K/month cost estimate — can land very differently depending on how you use it.</p>
+
+        <div class="pattern-cards">
+          <div class="pattern-card pattern-bad">
+            <div class="pattern-label bad">❌ Cost as a veto</div>
+            <div class="pattern-quote">"$6–8K/month is too much."</div>
+            <div class="pattern-why">Ends the conversation. Engineering hears: "PM is blocking us." The real question — whether the feature's business value offsets the cost — never gets asked.</div>
+          </div>
+          <div class="pattern-card pattern-bad">
+            <div class="pattern-label bad">❌ Ignore and ship</div>
+            <div class="pattern-quote">"Sounds good, let's add it to the plan."</div>
+            <div class="pattern-why">Defers the hard question until after you've committed. If the feature changes your unit economics and you haven't updated pricing, you find out 3 months later at the board meeting.</div>
+          </div>
+          <div class="pattern-card pattern-good">
+            <div class="pattern-label good">✅ Cost as shared information</div>
+            <div class="pattern-quote">"$6–8K/month changes our unit economics. Let's figure out together: what does that mean for pricing?"</div>
+            <div class="pattern-why">Gives Engineering the context for why the number matters. Keeps you both working on the same problem — how to ship this sustainably — rather than PM vs. Engineering.</div>
+          </div>
+        </div>
+
+        <div class="tip-card" style="margin-top:4px">
+          <strong>The right time for this conversation:</strong> Before architecture is finalized. Once Engineering has made technical decisions (chosen the state-sync approach, sized the Redis cluster), changing them is expensive. Cost awareness at design time is cheap. Cost awareness after launch is hard.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 140;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'FinOps-fluent PM!'; desc = 'You framed cost as shared information and kept Engineering as a partner. That\'s how you get good outcomes without being the cost cop.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'You\'re thinking about cost — the key next step is framing it collaboratively, not as a gate. Review the patterns and the "cost as shared information" framing.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'The goal isn\'t to block features for cost reasons — it\'s to make cost visible early enough to make good decisions about pricing and scope.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Cost is information, not a veto. "This is too expensive" ends conversations. "This changes our unit economics — what does that mean for pricing?" opens them.</li>
+            <li>The right time to have the cost conversation is before architecture is finalized — not after the sprint has started.</li>
+            <li>PMs and Engineering usually have the same goal (ship something sustainable). Cost is a shared input to that decision.</li>
+            <li>Architecture decisions are often also cost decisions: polling vs. WebSockets, Redis vs. database, sync vs. async. You don't need to choose, but understanding the cost implications helps you ask the right questions.</li>
+            <li>There is no universal answer on whether a feature's infrastructure cost is "too much" — it depends on ARPU, margin targets, and what the feature does for retention and growth.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>
