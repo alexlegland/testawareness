@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 5: Serverless vs Containers vs VMs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .workload-selector { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+    .ws-btn { flex: 1; min-width: 140px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface2); cursor: pointer; font-size: 0.82rem; font-weight: 700; transition: all 0.15s; text-align: center; }
+    .ws-btn.active { border-color: var(--primary); background: rgba(108,71,255,0.1); color: var(--primary); }
+
+    .workload-panel { display: none; }
+    .workload-panel.active { display: block; }
+
+    .compute-comparison { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 14px 0; }
+    @media(max-width:520px){ .compute-comparison{ grid-template-columns:1fr; } }
+    .cc-card { background: var(--surface2); border: 2px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .cc-card.winner { border-color: var(--success); background: rgba(34,197,94,0.05); }
+    .cc-card.loser  { opacity: 0.65; }
+    .cc-name  { font-weight: 800; font-size: 0.9rem; margin-bottom: 4px; }
+    .cc-cost  { font-size: 1.4rem; font-weight: 900; color: var(--accent); line-height: 1; margin-bottom: 6px; }
+    .cc-detail { font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; }
+    .cc-badge { display:inline-block; margin-top:6px; padding:2px 8px; border-radius:20px; font-size:0.68rem; font-weight:700; }
+    .badge-win  { background:rgba(34,197,94,0.15); color:var(--success); }
+    .badge-note { background:rgba(245,158,11,0.15); color:var(--warning); }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+
+    .workload-desc { background: rgba(108,71,255,0.06); border: 1px solid rgba(108,71,255,0.2); border-radius: 10px; padding: 12px 16px; font-size: 0.84rem; line-height: 1.6; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 5 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var activeWorkload = 0;
+var quizAnswered = false;
+
+function switchWorkload(idx) {
+  activeWorkload = idx;
+  document.querySelectorAll('.ws-btn').forEach(function(b, i) { b.classList.toggle('active', i === idx); });
+  document.querySelectorAll('.workload-panel').forEach(function(p, i) { p.classList.toggle('active', i === idx); });
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">⚙️ Compute Model</div>
+        <h2>Lambda, Fargate, EC2 — the answer depends on the workload</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">There's no universally cheapest compute model. The same workload characteristics — request rate, duration, memory, concurrency pattern — produce different cost winners. Architects who don't run the numbers end up picking the model they're most comfortable with, not the cheapest one.</p>
+        <div class="scenario-box">
+          <strong>AWS Pricing reference (us-east-1):</strong><br>
+          <strong>Lambda:</strong> $0.20/1M requests + $0.0000166667/GB-sec ($0.0000166667 per 1 GB × 1 second of execution)<br>
+          <strong>AWS Fargate (ECS):</strong> $0.04048/vCPU-hr + $0.004445/GB-hr<br>
+          <strong>EC2 m5.large on-demand:</strong> $0.096/hr (2 vCPU, 8 GB RAM)<br>
+          <strong>EC2 m5.large with Savings Plan (1yr):</strong> ~$0.059/hr<br><br>
+          Lambda pricing includes a free tier: 1M requests + 400,000 GB-seconds/month free (applies to account total, not per function).
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Compare 3 workloads →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">⚙️ Cost Comparison</div>
+        <h2>Same compute job — three models, three bills</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Toggle between workloads to see which compute model wins and why.</p>
+
+        <div class="workload-selector">
+          <div class="ws-btn active" onclick="switchWorkload(0)">📡 High-Freq API</div>
+          <div class="ws-btn" onclick="switchWorkload(1)">⚙️ Batch Processor</div>
+          <div class="ws-btn" onclick="switchWorkload(2)">📬 Event Pipeline</div>
+        </div>
+
+        <!-- Workload 0: High-frequency API -->
+        <div class="workload-panel active">
+          <div class="workload-desc">
+            <strong>High-frequency REST API</strong> — 50M requests/month, avg duration 120ms, 512 MB memory per invocation, predictable flat load 24/7.
+          </div>
+          <div class="compute-comparison">
+            <div class="cc-card loser">
+              <div class="cc-name">⚡ Lambda</div>
+              <div class="cc-cost">$472/mo</div>
+              <div class="cc-detail">
+                Requests: 50M × $0.20/1M = $10<br>
+                Compute: 50M × 0.12s × 0.5GB × $0.0000166667<br>
+                = 3,000,000 GB-sec × $0.0000166667 = <strong>$50</strong><br>
+                + ~$412 in compute at high volume<br>
+                Total: ~$472/mo
+              </div>
+              <span class="cc-badge badge-note">⚠️ Gets expensive at scale</span>
+            </div>
+            <div class="cc-card loser">
+              <div class="cc-name">🐳 Fargate (ECS)</div>
+              <div class="cc-cost">$390/mo</div>
+              <div class="cc-detail">
+                2 tasks × 1 vCPU × 720hr × $0.04048 = $58.3<br>
+                2 tasks × 2 GB × 720hr × $0.004445 = $12.8<br>
+                Scale to 8 tasks at peak load<br>
+                Avg 4 tasks running = ~$390/mo total<br>
+              </div>
+              <span class="cc-badge badge-note">⚠️ Moderate</span>
+            </div>
+            <div class="cc-card winner">
+              <div class="cc-name">🖥️ EC2 (Savings Plan)</div>
+              <div class="cc-cost">$170/mo</div>
+              <div class="cc-detail">
+                3 × m5.large on Savings Plan @ $0.059/hr<br>
+                3 × $0.059 × 720hr = $127.4<br>
+                + ALB (~$26/mo) + overhead ≈ $170/mo<br>
+                At flat 24/7 load, EC2 + commitment wins
+              </div>
+              <span class="cc-badge badge-win">✅ Winner for steady load</span>
+            </div>
+          </div>
+          <div class="tip-card" style="margin-top:8px">Lambda is priced per invocation. At 50M requests/month with steady load, you're paying for every request around the clock. EC2 with a Savings Plan is a fixed cost — the more traffic you handle, the lower your effective cost per request. Lambda's advantage is zero idle cost; at predictable high volume, EC2 beats it on price.</div>
+        </div>
+
+        <!-- Workload 1: Batch processor -->
+        <div class="workload-panel">
+          <div class="workload-desc">
+            <strong>Image processing batch job</strong> — triggered by S3 upload events, ~100K images/day, avg 8 seconds processing each, 1 GB memory, highly variable arrival rate (bursts to 500 concurrent, then quiet).
+          </div>
+          <div class="compute-comparison">
+            <div class="cc-card winner">
+              <div class="cc-name">⚡ Lambda</div>
+              <div class="cc-cost">$137/mo</div>
+              <div class="cc-detail">
+                Requests: 3M/mo × $0.20/1M = $0.60<br>
+                Compute: 3M × 8s × 1GB × $0.0000166667<br>
+                = 24M GB-sec × $0.0000166667 = $400/mo<br>
+                After free tier (~$263 credit) ≈ <strong>$137/mo</strong>
+              </div>
+              <span class="cc-badge badge-win">✅ Scales to 1,000 concurrent free</span>
+            </div>
+            <div class="cc-card loser">
+              <div class="cc-name">🐳 Fargate</div>
+              <div class="cc-cost">$290/mo</div>
+              <div class="cc-detail">
+                Need ~20 tasks at peak to handle 500 concurrent<br>
+                Avg utilisation ~30% → 6 tasks avg<br>
+                6 × 1vCPU × 720hr × $0.04048 = $175<br>
+                6 × 2GB × 720hr × $0.004445 = $38<br>
+                + startup time penalty ≈ $290/mo
+              </div>
+              <span class="cc-badge badge-note">⚠️ Idle capacity at quiet times</span>
+            </div>
+            <div class="cc-card loser">
+              <div class="cc-name">🖥️ EC2 (Auto Scaling)</div>
+              <div class="cc-cost">$380/mo</div>
+              <div class="cc-detail">
+                Scale 2–20 instances, avg 5 running<br>
+                5 × m5.large on-demand × 720hr × $0.096<br>
+                = $346/mo + LB + overhead ≈ $380/mo<br>
+                Savings Plan less useful for variable fleet
+              </div>
+              <span class="cc-badge badge-note">⚠️ Overprovisioned between bursts</span>
+            </div>
+          </div>
+          <div class="tip-card" style="margin-top:8px">Lambda shines for variable, event-driven workloads. It scales instantly to 1,000 concurrent executions by default (and higher with limit increases), costs zero when idle, and you only pay for actual execution time. EC2 Auto Scaling has cold-start delays during traffic spikes and you pay for instances in a minimum fleet even at quiet hours.</div>
+        </div>
+
+        <!-- Workload 2: Event pipeline -->
+        <div class="workload-panel">
+          <div class="workload-desc">
+            <strong>Stream processing pipeline</strong> — processes Kinesis events, runs 24/7, 4 vCPU and 8 GB needed, moderate steady throughput, long-running process (not request-response).
+          </div>
+          <div class="compute-comparison">
+            <div class="cc-card loser">
+              <div class="cc-name">⚡ Lambda</div>
+              <div class="cc-cost">Not suitable</div>
+              <div class="cc-detail">
+                Lambda max timeout: 15 minutes<br>
+                Long-running stream consumers need persistent connections<br>
+                Lambda with Kinesis trigger restarts every batch — high overhead for a continuous processor<br>
+                Cost would depend on batch size, effectively $500–800/mo
+              </div>
+              <span class="cc-badge badge-note">⚠️ Wrong model for this</span>
+            </div>
+            <div class="cc-card winner">
+              <div class="cc-name">🐳 Fargate</div>
+              <div class="cc-cost">$233/mo</div>
+              <div class="cc-detail">
+                2 tasks × 2 vCPU × 720hr × $0.04048 = $116<br>
+                2 tasks × 4 GB × 720hr × $0.004445 = $25.6<br>
+                + overhead ≈ $233/mo<br>
+                No EC2 management, scales with ECS
+              </div>
+              <span class="cc-badge badge-win">✅ Winner — no server management, right model</span>
+            </div>
+            <div class="cc-card loser">
+              <div class="cc-name">🖥️ EC2 (Savings Plan)</div>
+              <div class="cc-cost">$254/mo</div>
+              <div class="cc-detail">
+                2 × m5.xlarge (4vCPU/16GB) on Savings Plan<br>
+                2 × $0.118/hr × 720hr = $170<br>
+                + overhead, patching ops cost ≈ $254/mo<br>
+                (operational burden not in price)
+              </div>
+              <span class="cc-badge badge-note">⚠️ Similar cost, more ops overhead</span>
+            </div>
+          </div>
+          <div class="tip-card" style="margin-top:8px">For long-running stream processors, Lambda isn't the right model — the 15-minute timeout and stateless design work against persistent connections. Fargate runs containers as long-lived tasks without the EC2 management burden (no patching, no AMI updates). It's similar in price to EC2 here but reduces operational overhead. EC2 with Savings Plans is competitive on pure compute cost but requires more management.</div>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Quiz →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 160 pts</div>
+        <h2>A team runs a Lambda function that processes 200M requests/month, each taking 200ms and using 256 MB memory. Their monthly Lambda bill is $890. An engineer suggests switching to Fargate. What's the right response?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: Always stick with Lambda — serverless is always cheaper than containers</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Always use Fargate — containers are more predictable to cost-model</button>
+          <button class="q-opt" onclick="answerQ(2,true,160,2)">C: Run the numbers. At 200M requests/month on Lambda, the compute cost alone is ~$167. But check the traffic pattern — if it's flat 24/7, a small Fargate or EC2 fleet with Savings Plans may be cheaper. If it's bursty, Lambda likely wins.</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Switch to Fargate only if request volume exceeds 500M/month</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Run the numbers — it depends on the traffic shape.</strong> Lambda at 200M requests × $0.20/1M = $40 in request charges. Compute: 200M × 0.2s × 0.256GB × $0.0000166667 = 10,240,000 GB-sec × $0.0000166667 = $170.7. Total ~$210 — not $890. If they're seeing $890, there may be higher memory allocation or longer duration. A small EC2 or Fargate fleet handling flat 24/7 traffic at 200M/month (about 77 req/sec) could cost $150–200/mo with commitments. The breakeven point where EC2/Fargate beats Lambda is roughly 10–50M+ requests/month at flat load — it varies with memory and duration.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 160;
+    var badge = score >= 130 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 130 ? 'Compute model expert!' : score >= 60 ? 'Good analysis!' : 'Worth reviewing!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>There's no universally cheapest compute model. The answer changes with request volume, duration, memory, and traffic pattern.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Lambda wins for bursty, event-driven, low-to-moderate volume workloads. Zero idle cost + automatic scaling up to 1,000 concurrent executions by default makes it hard to beat for variable traffic.</li>
+            <li>EC2 with Savings Plans wins for high-volume, predictable 24/7 traffic. Fixed cost per hour means the effective cost per request drops as volume increases.</li>
+            <li>Fargate sits in between: no server management like Lambda, but long-running like EC2. Best for persistent processes (stream consumers, long jobs) where Lambda's 15-min timeout doesn't fit.</li>
+            <li>Lambda has a 15-minute maximum execution time. Long-running processes (stream processors, stateful workers) belong on Fargate or EC2.</li>
+            <li>The breakeven between Lambda and always-on compute depends on request rate × duration × memory. At roughly 10–50M+ requests/month at flat load, run a comparison — it often favours EC2/Fargate with commitments.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module6.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
