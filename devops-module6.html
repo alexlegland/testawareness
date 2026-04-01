@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 6: Container Platform Costs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .dockerfile-block { background: #0d0d1c; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.9; margin: 10px 0; overflow-x: auto; }
+    .df-cmd  { color: #7c9ef8; font-weight: 700; }
+    .df-str  { color: #f1b24a; }
+    .df-cmt  { color: #6a737d; font-style: italic; }
+    .df-bad  { background: rgba(239,68,68,0.12); border-radius: 3px; padding: 0 3px; }
+    .df-ok   { background: rgba(34,197,94,0.1);  border-radius: 3px; padding: 0 3px; }
+
+    .diff-line { font-family: 'Courier New', monospace; font-size: 0.78rem; line-height: 1.7; padding: 3px 10px; border-radius: 4px; }
+    .diff-add { background: rgba(34,197,94,0.08); color: #7ee787; }
+    .diff-del { background: rgba(239,68,68,0.08); color: #ff8080; }
+    .diff-ctx { color: var(--text-muted); }
+
+    .finding-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+    .finding { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; }
+    .finding:hover:not(.open) { border-color: var(--primary); }
+    .finding.open { border-color: rgba(108,71,255,0.3); cursor: default; }
+    .f-header { display: flex; align-items: center; gap: 12px; padding: 11px 16px; }
+    .f-icon   { font-size: 1.2rem; flex-shrink: 0; }
+    .f-title  { font-weight: 700; font-size: 0.86rem; flex: 1; }
+    .f-tag    { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .f-hint   { font-size: 0.7rem; color: var(--primary); font-weight: 600; white-space: nowrap; }
+    .f-body   { display: none; padding: 0 16px 14px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 0.8rem; line-height: 1.65; color: var(--text-muted); }
+    .finding.open .f-body { display: block; }
+    .finding.open .f-hint { display: none; }
+    .tag-cost { background: rgba(239,68,68,0.12); color: var(--danger); }
+    .tag-fix  { background: rgba(34,197,94,0.1);  color: var(--success); }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Module 6 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var findingsOpened = 0;
+var FINDINGS_TOTAL = 5;
+var quizAnswered = false;
+
+function openFinding(id) {
+  var el = document.getElementById('f-' + id);
+  if (!el || el.classList.contains('open')) return;
+  el.classList.add('open');
+  findingsOpened++;
+  if (findingsOpened >= FINDINGS_TOTAL) document.getElementById('findings-next').disabled = false;
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🐳 Container Costs</div>
+        <h2>The container platform has grown quietly expensive</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">The team migrated to ECS Fargate 14 months ago. Images are built and pushed on every merge. The ECR registry holds every version ever built. Fargate tasks were sized during the initial migration — nobody's looked at them since.</p>
+        <div class="scenario-box">
+          <strong>Current state:</strong><br>
+          — 12 microservices on ECS Fargate<br>
+          — Average Docker image size: <strong>1.9 GB</strong><br>
+          — ECR: <strong>840 image versions</strong> stored across all repos<br>
+          — Fargate task sizing: 1 vCPU / 4 GB each (from initial migration spec)<br>
+          — CloudWatch: average task CPU 6%, average memory 28%<br>
+          — ECS launch type: Fargate (no EC2 capacity)
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Audit the platform →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    findingsOpened = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🐳 Platform Audit</div>
+        <h2>Five cost findings — click each to understand impact and fix</h2>
+        <div class="finding-list">
+
+          <div class="finding" id="f-0" onclick="openFinding(0)">
+            <div class="f-header"><span class="f-icon">📦</span><span class="f-title">1.9 GB average image size</span><span class="f-tag tag-cost">$ECR + Pull cost</span><span class="f-hint">Click →</span></div>
+            <div class="f-body">
+              ECR storage: $0.10/GB/month. 840 versions × 1.9 GB avg = 1,596 GB = <strong>$159.60/mo</strong> in storage. Plus: larger images mean slower pull times (cold start latency) and more data transfer from ECR to ECS tasks.<br><br>
+              The main causes of large Node.js/Python images:<br>
+              — Using <code>node:18</code> (full Debian, ~900 MB) instead of <code>node:18-alpine</code> (~120 MB)<br>
+              — Copying <code>node_modules</code> including devDependencies<br>
+              — Not using multi-stage builds (build tools included in final image)<br><br>
+              <strong>Fix:</strong> Multi-stage Dockerfile: build stage uses full image, final stage uses alpine + only production deps. Typical result: 1.9 GB → 150–200 MB. A well-optimised Node.js service image is under 200 MB.
+            </div>
+          </div>
+
+          <div class="finding" id="f-1" onclick="openFinding(1)">
+            <div class="f-header"><span class="f-icon">🗂️</span><span class="f-title">840 image versions in ECR — no lifecycle policy</span><span class="f-tag tag-cost">Pure storage waste</span><span class="f-hint">Click →</span></div>
+            <div class="f-body">
+              Every CI build pushes a new image and nothing is ever deleted. 840 versions × 1.9 GB = 1,596 GB × $0.10 = $159/mo. With a lifecycle policy that keeps only the last 10 tagged versions per repository, storage drops to: 12 repos × 10 versions × 1.9 GB = 228 GB = $22.80/mo. That's a <strong>$136/mo saving</strong> from a 5-line ECR lifecycle rule. This is free to implement and takes minutes.<br><br>
+              <strong>Fix:</strong><br>
+              <code style="font-size:0.75rem">aws ecr put-lifecycle-policy --repository-name my-service --lifecycle-policy-text '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"untagged","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}},{"rulePriority":2,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'</code>
+            </div>
+          </div>
+
+          <div class="finding" id="f-2" onclick="openFinding(2)">
+            <div class="f-header"><span class="f-icon">⚙️</span><span class="f-title">1 vCPU / 4 GB Fargate tasks at 6% CPU / 28% memory</span><span class="f-tag tag-cost">4× over-provisioned</span><span class="f-hint">Click →</span></div>
+            <div class="f-body">
+              Fargate pricing: $0.04048/vCPU-hr + $0.004445/GB-hr.<br>
+              Current: 1 vCPU + 4 GB = $0.04048 + $0.01778 = $0.05826/hr per task.<br>
+              At 6% CPU and 28% memory, actual usage: ~0.06 vCPU and ~1.1 GB.<br>
+              Right-sized: 0.25 vCPU + 1 GB = $0.01012 + $0.004445 = $0.01457/hr per task — <strong>75% cheaper</strong>.<br><br>
+              For 12 services, 5 tasks each running 24/7:<br>
+              Before: 60 tasks × $0.05826 × 720hr = <strong>$2,516/mo</strong><br>
+              After:  60 tasks × $0.01457 × 720hr = <strong>$629/mo</strong><br><br>
+              Note: Fargate valid vCPU/memory combinations have constraints — check the AWS docs for valid pairs. 0.25 vCPU supports 0.5–2 GB; 0.5 vCPU supports 1–4 GB.
+            </div>
+          </div>
+
+          <div class="finding" id="f-3" onclick="openFinding(3)">
+            <div class="f-header"><span class="f-icon">🚀</span><span class="f-title">All Fargate — no EC2 for baseline capacity</span><span class="f-tag tag-cost">Potential 30–40% saving</span><span class="f-hint">Click →</span></div>
+            <div class="f-body">
+              Fargate has no Savings Plan equivalent that matches EC2's discount levels for always-on tasks. For workloads with a predictable, stable baseline, ECS on EC2 with Savings Plans can be 30–40% cheaper than Fargate.<br><br>
+              <strong>Trade-off:</strong> Fargate removes EC2 management overhead (patching, AMI updates, bin-packing). For a 12-service platform at ~$629/mo (right-sized), the management cost of an EC2 ECS cluster may not be worth the ~$190/mo saving. The calculus changes at higher scale (50+ tasks, $5K+/mo Fargate).<br><br>
+              <strong>Middle ground:</strong> ECS capacity providers — use EC2 Spot for batch/non-critical tasks, Fargate for production services. Spot EC2 with ECS can cut compute costs 70%+ for the right workloads.
+            </div>
+          </div>
+
+          <div class="finding" id="f-4" onclick="openFinding(4)">
+            <div class="f-header"><span class="f-icon">🔄</span><span class="f-title">No Fargate Spot for non-critical services</span><span class="f-tag tag-fix">~70% saving on eligible tasks</span><span class="f-hint">Click →</span></div>
+            <div class="f-body">
+              Fargate Spot is AWS spare capacity for Fargate tasks — same API, same experience, with a 2-minute interruption notice. Price: ~70% cheaper than standard Fargate.<br><br>
+              Not all 12 services need production-grade availability. Background workers, report generators, and async processors can tolerate occasional 2-minute interruptions with graceful handling.<br><br>
+              <strong>Pattern:</strong> Use Fargate Spot for tasks with these characteristics:<br>
+              — Stateless (no local state lost on interruption)<br>
+              — Idempotent (safe to retry)<br>
+              — Not customer-facing<br><br>
+              If 4 of 12 services qualify, moving them to Fargate Spot saves ~70% on those tasks. At $0.01457/hr (right-sized) vs. Fargate Spot ~$0.004/hr: saving ~$120/mo additional.
+            </div>
+          </div>
+
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 5 findings to continue</span>
+          <button class="btn btn-primary" id="findings-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 160 pts</div>
+        <h2>A developer asks: "Should we always use alpine base images to reduce Docker image size?" What's the most accurate response?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: Yes — alpine is always the right choice, it's the same image with less bloat</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: No — alpine uses musl libc instead of glibc, which can cause compatibility issues with some native dependencies (e.g., certain Node.js packages, Python C extensions)</button>
+          <button class="q-opt" onclick="answerQ(2,true,160,2)">C: It depends — alpine is great for most services, but test native dependencies carefully. For those that don't work on alpine, use -slim (Debian-based, smaller than full). Multi-stage builds give you the same size reduction without the libc issue.</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Alpine is only for development — use full images in production for stability</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>It depends — and the alternative is multi-stage builds.</strong> Alpine uses musl libc. Most pure JS/Python code works fine. But native addons (some npm packages use node-gyp, some Python packages use C extensions) may fail or behave differently on musl. The safe path: try alpine, run your full test suite in the CI build against the alpine image. If it passes, ship it. If not, use <code>node:18-slim</code> (Debian-based, ~200 MB vs. alpine's ~120 MB but far smaller than the 900 MB full image). Multi-stage builds solve the image size problem regardless of the final base: build stage can use the full image, final stage just copies compiled artifacts.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 160;
+    var badge = score >= 130 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 130 ? 'Container cost expert!' : score >= 60 ? 'Good instincts!' : 'Worth reviewing!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Container platform costs accumulate in three places: image storage, task over-provisioning, and missed Spot/discount opportunities.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Docker image size matters for ECR storage ($0.10/GB/month) and pull latency. Multi-stage builds + alpine base can reduce a 1.9 GB image to 150–200 MB — a 10× reduction.</li>
+            <li>ECR lifecycle policies are free to implement and prevent unbounded storage growth. Keep only the last N tagged versions; delete untagged images automatically after a few days.</li>
+            <li>Fargate tasks sized at initial migration often stay that way for years. At 6% CPU and 28% memory, downsizing from 1 vCPU/4 GB to 0.25 vCPU/1 GB saves 75% per task.</li>
+            <li>Fargate Spot gives ~70% savings for stateless, interruptible tasks. Background workers, report jobs, and async processors are prime candidates.</li>
+            <li>Alpine vs. slim vs. full base images: alpine is usually fine for pure code, but native dependencies need testing. Multi-stage builds solve the size problem for any base image choice.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
