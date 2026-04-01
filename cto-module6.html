@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 6: Vendor Negotiation — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .chat-thread { display:flex; flex-direction:column; gap:12px; margin:16px 0; }
+    .chat-msg { display:flex; gap:10px; align-items:flex-start; }
+    .chat-msg.them { flex-direction:row; }
+    .chat-msg.you  { flex-direction:row-reverse; }
+    .chat-avatar { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:800; flex-shrink:0; color:white; }
+    .chat-avatar.aws { background:linear-gradient(135deg,#ff9900,#ff6600); }
+    .chat-avatar.cto { background:linear-gradient(135deg,var(--primary),var(--accent)); }
+    .chat-bubble { background:var(--surface2); border:1px solid var(--border); border-radius:14px; padding:12px 16px; max-width:82%; font-size:0.88rem; line-height:1.6; }
+    .chat-msg.you .chat-bubble { background:rgba(108,71,255,0.12); border-color:rgba(108,71,255,0.3); }
+    .chat-sender { font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; font-weight:600; }
+
+    .nego-opts { display:flex; flex-direction:column; gap:9px; margin:12px 0; }
+    .nego-opt { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:13px 16px; cursor:pointer; transition:all 0.15s; text-align:left; width:100%; }
+    .nego-opt:hover:not(:disabled) { border-color:var(--primary); transform:translateX(3px); }
+    .nego-opt:disabled { cursor:default; }
+    .nego-opt.good { border-color:var(--success); background:rgba(34,197,94,0.07); opacity:1 !important; }
+    .nego-opt.ok   { border-color:var(--warning); background:rgba(245,158,11,0.07); opacity:1 !important; }
+    .nego-opt.bad  { border-color:var(--danger);  background:rgba(239,68,68,0.07);  opacity:1 !important; }
+    .no-text    { font-size:0.88rem; font-weight:600; margin-bottom:5px; }
+    .no-reveal  { font-size:0.8rem; color:var(--text-muted); line-height:1.55; display:none; padding-top:8px; border-top:1px solid var(--border); margin-top:8px; }
+    .nego-opt.good .no-reveal,
+    .nego-opt.ok   .no-reveal,
+    .nego-opt.bad  .no-reveal { display:block; }
+
+    .turn-pill { display:inline-block; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:99px; margin-top:6px; }
+    .turn-pill.good { background:rgba(34,197,94,0.15); color:var(--success); }
+    .turn-pill.ok   { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .turn-pill.bad  { background:rgba(239,68,68,0.15);  color:var(--danger); }
+
+    .leverage-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+    @media (max-width:500px) { .leverage-grid { grid-template-columns:1fr; } }
+    .leverage-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+    .lev-icon { font-size:1.2rem; margin-bottom:6px; }
+    .lev-title { font-weight:700; font-size:0.85rem; margin-bottom:4px; }
+    .lev-desc  { font-size:0.78rem; color:var(--text-muted); line-height:1.5; }
+    .lev-card.strong { border-color:rgba(34,197,94,0.3); }
+    .lev-card.weak   { border-color:rgba(239,68,68,0.2); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Module 6 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var turnAnswered = [false, false, false];
+
+var turns = [
+  {
+    pts: 60,
+    aws: 'Hi, thanks for taking the time. Based on your current spend of $1.2M/year with us, I wanted to discuss an Enterprise Discount Program that could offer you 10% off your bill in exchange for a 3-year commit. Happy to send you the paperwork this week.',
+    opts: [
+      { text: '"10% sounds great — let\'s do it. Send over the paperwork."', outcome:'bad', reveal:'Accepting the first offer in any enterprise negotiation is a mistake. Cloud providers open with a number that has room to move. 10% off $1.2M is $120K/year — but 15–20% is often achievable with minimal pushback, especially with a strong growth trajectory or competitive bid.' },
+      { text: '"Thanks. Before we talk numbers, I want to understand what an EDP actually commits us to, and what happens if our spend drops."', outcome:'good', reveal:'Good opening. Understanding the structure before the number. Key EDP facts: you commit to a minimum annual spend; if you fall short, you still owe the committed amount. Understanding the downside before negotiating the discount is essential — a bad structure at 15% off can be worse than a good structure at 10% off.' },
+      { text: '"We\'re actually evaluating Google Cloud right now. We might not be AWS-only going forward."', outcome:'ok', reveal:'Competitive pressure is real leverage — but only if it\'s credible. If you don\'t actually have a GCP evaluation in progress, AWS will ask questions you can\'t answer. Fabricating competitive pressure that collapses under scrutiny weakens your position. Real competitive evaluation: strong leverage. Bluff: backfires.' }
+    ]
+  },
+  {
+    pts: 60,
+    aws: 'The EDP works like this: you commit to a minimum annual spend and we apply a discount to all eligible services. If you spend more than the commit, you pay on-demand or Savings Plan rates on the overage. If you spend less, you still pay the committed amount. Given your 40% YoY growth trajectory, we think you\'ll hit the committed spend comfortably.',
+    opts: [
+      { text: '"Understood. We want to commit to our current baseline of $1.2M, not our projected spend. If we grow, we\'ll happily pay the overage."', outcome:'good', reveal:'This is the right stance. Commit at your current baseline, not your projected spend. If you commit $1.5M based on growth projections and growth slows, you\'re paying $300K for compute you didn\'t use. AWS benefits from growth projections built into your commit — you benefit from committing what you know you\'ll spend.' },
+      { text: '"If we\'re growing 40% per year, let\'s commit to $1.7M to maximise our discount tier."', outcome:'bad', reveal:'Committing above your current run rate based on growth projections is risky. A slower quarter, a strategic pivot, or an architectural change (e.g., moving batch workloads to spot) could leave you paying for committed spend you don\'t use. Over-committing an EDP is one of the most expensive enterprise cloud mistakes.' },
+      { text: '"Can we get a 6-month trial before committing to a full year?"', outcome:'ok', reveal:'Shorter terms typically come with lower discounts. A 1-year EDP at 15% off might become a 6-month arrangement at 8% off — which may or may not be worth the flexibility. It\'s worth asking, but go in knowing the tradeoff. The better ask is for flexibility provisions (ramp clauses, spend rollover) within a standard 1-year term.' }
+    ]
+  },
+  {
+    pts: 60,
+    aws: 'Given your current spend and growth trajectory, we can offer 13% discount on a 1-year EDP at $1.2M annual commit. This would save you $156K this year. I\'d need your decision by end of month to get the finance team to process it.',
+    opts: [
+      { text: '"Let\'s do it — 13% off is strong and the timeline works."', outcome:'ok', reveal:'13% is above the 10% opening — you\'ve made progress. But "end of month" deadline is a sales tactic, not a hard constraint. Enterprise deals rarely expire on 30-day timelines. You have time to push further or get a second opinion from a FinOps advisor or competing cloud rep before signing.' },
+      { text: '"We need at least 15%, plus a ramp clause for the first quarter in case our architectural migration takes longer than expected. Otherwise we\'ll continue the GCP evaluation in parallel."', outcome:'good', reveal:'Strong closing position. 15% off $1.2M is $180K/year — a $24K improvement over 13%. Ramp clauses (lower committed spend in Q1, ramping to full commitment in Q2–Q4) protect you from paying for committed spend during transition periods. Combining a specific counter-offer with a credible alternative keeps momentum without burning the relationship.' },
+      { text: '"We need to loop in our CFO and board before committing. This will take 3 months."', outcome:'bad', reveal:'Stalling for 3 months loses the deal momentum and signals to AWS that you\'re not a serious negotiating partner. If the CFO and board need to be involved, loop them in now — not as a deflection tactic. Enterprise cloud negotiations work best with a clear internal decision-maker and a timeline that respects both sides.' }
+    ]
+  }
+];
+
+function pickOption(turnIdx, optIdx) {
+  if (turnAnswered[turnIdx]) return;
+  turnAnswered[turnIdx] = true;
+
+  var opt = turns[turnIdx].opts[optIdx];
+  var pts = opt.outcome === 'good' ? turns[turnIdx].pts : (opt.outcome === 'ok' ? Math.floor(turns[turnIdx].pts / 2) : 0);
+  score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  document.querySelectorAll('.nego-opt[data-turn="' + turnIdx + '"]').forEach(function(b) { b.disabled = true; });
+  var chosen = document.getElementById('no-' + turnIdx + '-' + optIdx);
+  chosen.classList.add(opt.outcome);
+  chosen.disabled = false;
+
+  var pill = document.getElementById('pill-' + turnIdx);
+  pill.className = 'turn-pill ' + opt.outcome;
+  pill.textContent = opt.outcome === 'good' ? '+' + pts + ' pts' : (opt.outcome === 'ok' ? '+' + pts + ' pts — workable' : '+0 pts');
+  pill.style.display = 'inline-block';
+
+  var next = document.getElementById('nturn-' + (turnIdx + 1));
+  if (next) {
+    next.style.display = 'block';
+    next.scrollIntoView({ behavior:'smooth', block:'start' });
+  } else {
+    document.getElementById('nego-next').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🤝 Vendor Negotiation</div>
+        <h2>Your AWS spend hits $1.2M/year. The rep calls.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">At this spend level, AWS will proactively offer an Enterprise Discount Program (EDP). Understanding the leverage and the structure before you negotiate saves real money.</p>
+
+        <p style="font-weight:600;margin-bottom:10px">Your leverage going into this call:</p>
+        <div class="leverage-grid">
+          <div class="leverage-card lev-card strong">
+            <div class="lev-icon">📈</div>
+            <div class="lev-title">40% YoY growth</div>
+            <div class="lev-desc">AWS wants a long-term relationship with a growing customer. Growth trajectory is your strongest card.</div>
+          </div>
+          <div class="leverage-card lev-card strong">
+            <div class="lev-icon">☁️</div>
+            <div class="lev-title">Multi-cloud evaluation</div>
+            <div class="lev-desc">Even exploratory interest in GCP/Azure creates real competitive pressure — if it's credible.</div>
+          </div>
+          <div class="leverage-card lev-card strong">
+            <div class="lev-icon">💰</div>
+            <div class="lev-title">$1.2M baseline</div>
+            <div class="lev-desc">You're above the typical EDP entry threshold. You have enough spend to negotiate meaningfully.</div>
+          </div>
+          <div class="leverage-card lev-card weak">
+            <div class="lev-icon">🔒</div>
+            <div class="lev-title">Deep AWS integration</div>
+            <div class="lev-desc">AWS knows migration is painful. High integration = lower leverage for "we'll leave" threats.</div>
+          </div>
+        </div>
+
+        <div class="tip-card">
+          <strong>EDP mechanics:</strong> You commit to a minimum annual spend. AWS applies a discount to eligible services. If you spend more than the commit, overage is at standard rates. If you spend less, you still pay the committed minimum.
+        </div>
+
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start the call →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    turnAnswered = [false, false, false];
+
+    var turnsHTML = turns.map(function(turn, ti) {
+      var opts = turn.opts.map(function(opt, oi) {
+        return '<button class="nego-opt" id="no-' + ti + '-' + oi + '" data-turn="' + ti + '" onclick="pickOption(' + ti + ',' + oi + ')">' +
+          '<div class="no-text">' + opt.text + '</div>' +
+          '<div class="no-reveal">' + opt.reveal + '</div>' +
+        '</button>';
+      }).join('');
+
+      return '<div id="nturn-' + ti + '" style="' + (ti > 0 ? 'display:none' : '') + '">' +
+        '<div class="chat-thread">' +
+          '<div class="chat-msg them">' +
+            '<div class="chat-avatar aws">AWS</div>' +
+            '<div><div class="chat-sender">Sarah K. · AWS Enterprise Account Manager</div><div class="chat-bubble">' + turn.aws + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-weight:600;font-size:0.88rem;margin-bottom:8px">How do you respond? <span style="font-weight:400;color:var(--text-muted)">(up to ' + turn.pts + ' pts)</span></p>' +
+        '<div class="nego-opts">' + opts + '</div>' +
+        '<div id="pill-' + ti + '" class="turn-pill" style="display:none"></div>' +
+        (ti < turns.length - 1 ? '<div style="height:16px;border-left:2px dashed var(--border);margin-left:18px;margin-top:12px"></div>' : '') +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🤝 3-turn negotiation — up to 180 pts</div>
+        <h2>On the call with your AWS rep</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Each turn unlocks after you respond. Your goal: get the best EDP structure, not just the biggest headline discount.</p>
+        ${turnsHTML}
+        <div class="step-actions" style="margin-top:20px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Complete all 3 turns to continue</span>
+          <button class="btn btn-primary" id="nego-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💡 What makes a good EDP</div>
+        <h2>The structure matters as much as the discount</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">A 15% discount with a bad structure can cost more than a 12% discount with the right protections.</p>
+
+        <div class="tip-card" style="margin-bottom:12px">
+          <strong>Clauses worth negotiating:</strong>
+          <ul>
+            <li><strong>Ramp clause:</strong> Lower committed spend in Q1, ramp to full commitment. Protects you if architectural migrations take longer than planned.</li>
+            <li><strong>True-up vs. prepay:</strong> Pay quarterly in arrears vs. upfront. Quarterly true-up protects cash flow and gives you flexibility if growth slows.</li>
+            <li><strong>Rollover:</strong> If you spend less than committed one quarter, rollover the unused commitment to the next. Not always available but worth asking for.</li>
+            <li><strong>Service coverage:</strong> Not all services are EDP-eligible. Marketplace purchases, support plans, and some third-party services may be excluded. Know what's covered.</li>
+          </ul>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Typical EDP range at $1.2M spend:</strong> 10–18% discount depending on term length, commitment level, and negotiation. 3-year terms get higher discounts but less flexibility. Most first-time EDPs land at 12–15% for 1-year commitments.
+          <br><br>
+          <strong>When to use a FinOps broker or advisor:</strong> At $2M+/year, third-party negotiators who work on contingency (% of savings) often pay for themselves by getting 2–5% more than CTOs negotiate alone.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 180;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'Negotiation-ready CTO!'; desc = 'You understood the structure before accepting the number, committed at your baseline not your projection, and pushed for the right terms. That\'s how you win EDP negotiations.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key pattern: understand the structure, commit conservatively, counter with specifics. Stalling or accepting the first offer are the two failure modes.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Enterprise cloud negotiations reward preparation. Know your leverage, know the EDP structure, and always counter the first offer.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Track complete! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Never accept the first EDP offer — cloud vendors open with a number that has room to move. 13% off a $1.2M spend is the opening, not the ceiling.</li>
+            <li>Commit at your current baseline spend, not your projected spend. Growth projections built into your commit benefit the vendor, not you.</li>
+            <li>EDP structure clauses (ramp, rollover, true-up timing) often matter more than the headline discount percentage.</li>
+            <li>Credible competitive pressure (real GCP/Azure evaluation) is leverage. Bluffed competitive pressure that falls apart under questioning weakens your position.</li>
+            <li>At $2M+/year cloud spend, a third-party FinOps advisor or cloud broker working on contingency typically recovers their fee multiple times over in improved terms.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 4: Spend as a Business Signal — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin: 14px 0; }
+    .kpi-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all 0.15s; }
+    .kpi-card:hover:not(.open) { border-color: var(--primary); transform: translateY(-2px); }
+    .kpi-card.open { cursor: default; border-color: rgba(108,71,255,0.4); background: rgba(108,71,255,0.06); }
+    .kpi-value { font-size: 1.6rem; font-weight: 900; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+    .kpi-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px; }
+    .kpi-hint  { font-size: 0.7rem; color: var(--primary); font-weight: 600; }
+    .kpi-explain { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); }
+    .kpi-card.open .kpi-hint    { display: none; }
+    .kpi-card.open .kpi-explain { display: block; }
+
+    .signal-row { display: flex; gap: 14px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .signal-row:last-child { border-bottom: none; }
+    .signal-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; }
+    .signal-body { flex: 1; }
+    .signal-title { font-weight: 700; font-size: 0.88rem; margin-bottom: 3px; }
+    .signal-desc  { font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; }
+    .signal-val   { font-size: 1rem; font-weight: 800; }
+    .sig-good  { color: var(--success); }
+    .sig-bad   { color: var(--danger); }
+    .sig-warn  { color: var(--warning); }
+
+    .interp-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .i-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .i-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .i-opt:disabled { cursor: default; }
+    .i-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .i-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 4 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var kpiOpened = 0;
+var TOTAL_KPIS = 5;
+var interpAnswered = false;
+
+function openKPI(id) {
+  var card = document.getElementById('kpi-' + id);
+  if (!card || card.classList.contains('open')) return;
+  card.classList.add('open');
+  kpiOpened++;
+  if (kpiOpened >= TOTAL_KPIS) {
+    document.getElementById('kpi-next').disabled = false;
+  }
+}
+
+function answerInterp(idx) {
+  if (interpAnswered) return;
+  interpAnswered = true;
+  var correct = idx === 1;
+  if (correct) score += 140;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.i-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === 1) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('interp-fb').style.display = 'block';
+  document.getElementById('interp-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📈 Business KPIs</div>
+        <h2>Cloud spend is data — if you read it right</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">The invoice total tells you how much you spent. It doesn't tell you if that's good or bad. $300K/month cloud spend at a company with 2M active users might be very efficient. The same spend at a company with 50K users is a problem. The signal is in the <em>ratio</em>, not the absolute number.</p>
+        <div class="scenario-box">
+          Finance teams that get this right translate cloud spend into ratios the business already cares about: cost per customer, infrastructure margin, spend-to-revenue ratio. These are numbers that end up in board presentations and investor materials — and they're derivable from the billing data you already have.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the KPIs →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    kpiOpened = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📊 KPI Explorer</div>
+        <h2>Five KPIs Finance teams track</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Click each metric to understand what it measures, how to calculate it, and what it signals.</p>
+
+        <div class="kpi-grid">
+          <div class="kpi-card" id="kpi-0" onclick="openKPI(0)">
+            <div class="kpi-value">$0.85</div>
+            <div class="kpi-label">Cost / Active User</div>
+            <div class="kpi-hint">Click to explore →</div>
+            <div class="kpi-explain">
+              <strong>Formula:</strong> Total cloud spend ÷ Monthly Active Users<br><br>
+              <strong>What it tells you:</strong> Is infrastructure scaling efficiently with user growth? If spend doubles but users only grow 40%, this ratio is deteriorating.<br><br>
+              <strong>Watch out for:</strong> Seasonal users inflate/deflate this. Compare cohorts consistently.
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-1" onclick="openKPI(1)">
+            <div class="kpi-value">18.4%</div>
+            <div class="kpi-label">Infra Margin</div>
+            <div class="kpi-hint">Click to explore →</div>
+            <div class="kpi-explain">
+              <strong>Formula:</strong> 100% − (Cloud spend ÷ Revenue)<br><br>
+              <strong>What it tells you:</strong> How much margin the business has after paying for the infrastructure that delivers revenue. SaaS companies typically target 70%+ gross margins; cloud is a major lever.<br><br>
+              <strong>Watch out for:</strong> This only measures cloud cost, not total COGS. Full gross margin includes hosting, support staff, and other delivery costs.
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-2" onclick="openKPI(2)">
+            <div class="kpi-value">7.2%</div>
+            <div class="kpi-label">Cloud / Revenue</div>
+            <div class="kpi-hint">Click to explore →</div>
+            <div class="kpi-explain">
+              <strong>Formula:</strong> Cloud spend ÷ Revenue<br><br>
+              <strong>What it tells you:</strong> What fraction of every revenue dollar goes to cloud infrastructure. B2B SaaS typically sees 5–15%. Data-heavy or AI-first products can exceed 20%.<br><br>
+              <strong>Watch out for:</strong> This ratio changes during growth phases — spending ahead of revenue to build infrastructure is normal, but a persistent upward trend is a flag.
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-3" onclick="openKPI(3)">
+            <div class="kpi-value">$2.10</div>
+            <div class="kpi-label">Cost / Transaction</div>
+            <div class="kpi-hint">Click to explore →</div>
+            <div class="kpi-explain">
+              <strong>Formula:</strong> Total cloud spend ÷ Transaction volume<br><br>
+              <strong>What it tells you:</strong> For transactional products (payments, bookings, API calls), this ties infra cost directly to the unit the business monetises. Useful for pricing decisions and margin modelling.<br><br>
+              <strong>Watch out for:</strong> Transactions vary in cost — a simple lookup vs. a batch job are both "transactions" but with very different compute profiles.
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-4" onclick="openKPI(4)">
+            <div class="kpi-value">34%</div>
+            <div class="kpi-label">Committed Spend %</div>
+            <div class="kpi-hint">Click to explore →</div>
+            <div class="kpi-explain">
+              <strong>Formula:</strong> Committed (Savings Plans + RIs) spend ÷ Total spend<br><br>
+              <strong>What it tells you:</strong> What proportion of your cloud spend is getting a discount through commitments. Low % means you're paying on-demand rates for more workloads than necessary. High % means you're committed — check utilisation to ensure you're not over-committed.<br><br>
+              <strong>Watch out for:</strong> This metric only makes sense alongside commitment utilisation rate. 80% committed but 60% utilized is worse than 40% committed and 95% utilized.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 5 KPIs to continue</span>
+          <button class="btn btn-primary" id="kpi-next" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    interpAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">📊 Interpretation — 140 pts</div>
+        <h2>Read these numbers. What's the story?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You're preparing the quarterly Finance review. Here are three months of KPIs for a B2B SaaS product.</p>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin:14px 0">
+          <div class="signal-row">
+            <div class="signal-icon">👤</div>
+            <div class="signal-body">
+              <div class="signal-title">Cost per Active User</div>
+              <div class="signal-desc">Jan: $0.72 → Feb: $0.85 → Mar: $1.04</div>
+            </div>
+            <div class="signal-val sig-bad">↑ +44%</div>
+          </div>
+          <div class="signal-row">
+            <div class="signal-icon">📈</div>
+            <div class="signal-body">
+              <div class="signal-title">Monthly Active Users</div>
+              <div class="signal-desc">Jan: 290K → Feb: 310K → Mar: 318K</div>
+            </div>
+            <div class="signal-val sig-good">+10%</div>
+          </div>
+          <div class="signal-row">
+            <div class="signal-icon">💰</div>
+            <div class="signal-body">
+              <div class="signal-title">Cloud Spend</div>
+              <div class="signal-desc">Jan: $209K → Feb: $264K → Mar: $331K</div>
+            </div>
+            <div class="signal-val sig-bad">↑ +58%</div>
+          </div>
+          <div class="signal-row">
+            <div class="signal-icon">📉</div>
+            <div class="signal-body">
+              <div class="signal-title">Cloud / Revenue ratio</div>
+              <div class="signal-desc">Jan: 8.2% → Feb: 10.4% → Mar: 12.9%</div>
+            </div>
+            <div class="signal-val sig-bad">↑ deteriorating</div>
+          </div>
+          <div class="signal-row">
+            <div class="signal-icon">🔒</div>
+            <div class="signal-body">
+              <div class="signal-title">Committed Spend %</div>
+              <div class="signal-desc">Jan: 61% → Feb: 58% → Mar: 31%</div>
+            </div>
+            <div class="signal-val sig-bad">↓ dropped</div>
+          </div>
+        </div>
+
+        <p style="color:var(--text-muted);margin-bottom:14px">What does this data signal to the CFO?</p>
+        <div class="interp-opts">
+          <button class="i-opt" onclick="answerInterp(0)">A: Normal growth — users grew 10% and spend grew proportionally with scale</button>
+          <button class="i-opt" onclick="answerInterp(1)">B: Spend is growing much faster than users — costs are not scaling efficiently, and discount coverage dropped sharply</button>
+          <button class="i-opt" onclick="answerInterp(2)">C: The Savings Plans expired — that's why committed spend dropped, no other concern</button>
+          <button class="i-opt" onclick="answerInterp(3)">D: This looks fine — cloud / revenue at 12.9% is within normal range for SaaS</button>
+        </div>
+        <div id="interp-fb" style="display:none" class="tip-card">
+          ✅ <strong>Spend grew 58% while users grew only 10%.</strong> That's the core signal — costs are decoupling from user growth, which means the cost-per-user ratio is deteriorating (from $0.72 to $1.04). At the same time, committed spend coverage fell from 61% to 31%, which means more spend is now on-demand pricing. These two trends together suggest: (1) new workloads or usage patterns are driving spend growth, and (2) the team isn't offsetting with commitments. This warrants investigation before Q2 budgeting.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="interp-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 140;
+    var badge = score >= 110 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 110 ? 'Signal-fluent!' : score >= 60 ? 'Good analysis!' : 'Build the habit!';
+    var desc = score >= 110 ? 'You read the ratios correctly: absolute spend growth alone isn\'t the story — the story is spend growing 5× faster than users, with discount coverage falling.' : 'The key habit: never read cloud spend in isolation. The ratio to users, to revenue, and to committed coverage tells the real story.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>The invoice total is a raw number. The signal is in the ratio: cost per user, cloud as % of revenue, cost per transaction. These ratios tell you if spending is under control relative to the business.</li>
+            <li>Cost per active user rising means either (a) you're adding expensive infrastructure without commensurate user growth, or (b) a feature changed the per-user compute profile. Both are worth investigating.</li>
+            <li>Cloud/Revenue ratio is commonly tracked by CFOs and investors as a proxy for gross margin efficiency. In B2B SaaS, a rising ratio is a flag that needs explanation.</li>
+            <li>Committed spend % (Savings Plans + RIs) falling means more spend is on on-demand rates. This is sometimes intentional (growth, uncertainty); sometimes it's a coverage gap that Finance and Engineering haven't caught.</li>
+            <li>These KPIs require collaboration: Finance generates the ratios, Engineering explains the drivers. Neither can do it alone.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
