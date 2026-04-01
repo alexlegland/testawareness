@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 5: Variance Reporting — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .variance-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin: 14px 0; }
+    .variance-table th { background: #17172a; padding: 9px 14px; text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    .variance-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .variance-table tr:last-child td { border-bottom: none; }
+    .var-pos  { color: var(--danger);  font-weight: 700; }
+    .var-neg  { color: var(--success); font-weight: 700; }
+    .var-zero { color: var(--text-muted); }
+
+    .drilldown-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 10px 0; }
+    .drilldown-step .ds-header { background: #17172a; padding: 9px 16px; font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .drill-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); gap: 12px; cursor: pointer; transition: background 0.15s; }
+    .drill-item:last-child { border-bottom: none; }
+    .drill-item:hover:not(.open) { background: rgba(108,71,255,0.06); }
+    .drill-item.open { cursor: default; background: rgba(108,71,255,0.04); }
+    .di-label  { font-size: 0.85rem; flex: 1; }
+    .di-var    { font-weight: 700; font-size: 0.9rem; min-width: 80px; text-align: right; }
+    .di-hint   { font-size: 0.7rem; color: var(--primary); font-weight: 600; white-space: nowrap; }
+    .di-explain { display: none; padding: 10px 16px 12px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; background: rgba(0,0,0,0.15); border-top: 1px solid var(--border); }
+    .drill-item.open + .di-explain { display: block; }
+    .drill-item.open .di-hint { display: none; }
+
+    .memo-block { background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.25); border-radius: 12px; padding: 16px 20px; margin: 14px 0; font-size: 0.84rem; line-height: 1.7; }
+    .memo-from { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 10px; }
+    .memo-highlight { background: rgba(108,71,255,0.12); border-radius: 4px; padding: 1px 5px; font-weight: 600; }
+
+    .classify-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .c-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .c-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .c-opt:disabled { cursor: default; }
+    .c-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .c-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 5 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 5</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var drillOpened = 0;
+var DRILL_TOTAL = 5;
+var classifyAnswered = false;
+
+function openDrill(id) {
+  var item = document.getElementById('dd-' + id);
+  if (!item || item.classList.contains('open')) return;
+  item.classList.add('open');
+  drillOpened++;
+  if (drillOpened >= DRILL_TOTAL) {
+    document.getElementById('drill-next').disabled = false;
+  }
+}
+
+function classify(idx) {
+  if (classifyAnswered) return;
+  classifyAnswered = true;
+  var correct = idx === 2; // "Volume + timing" is correct
+  if (correct) score += 150;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.c-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === 2) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('classify-fb').style.display = 'block';
+  document.getElementById('classify-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 5;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🔍 Month-End Close</div>
+        <h2>It's the 3rd of the month. The cloud bill is $40K over budget.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Budget was $290,000. Actual came in at $331,400. You have a CFO review in 48 hours. Engineering has told you "everything's fine." Finance needs a better answer than that.</p>
+
+        <table class="variance-table" style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <thead><tr><th>Item</th><th>Budget</th><th>Actual</th><th>Variance</th></tr></thead>
+          <tbody>
+            <tr><td>EC2 Compute</td><td>$128,000</td><td>$154,300</td><td class="var-pos">+$26,300</td></tr>
+            <tr><td>RDS Database</td><td>$58,000</td><td>$61,400</td><td class="var-pos">+$3,400</td></tr>
+            <tr><td>S3 Storage</td><td>$22,000</td><td>$19,800</td><td class="var-neg">−$2,200</td></tr>
+            <tr><td>Data Transfer</td><td>$14,000</td><td>$28,600</td><td class="var-pos">+$14,600</td></tr>
+            <tr><td>CloudFront CDN</td><td>$12,000</td><td>$11,200</td><td class="var-neg">−$800</td></tr>
+            <tr><td>Lambda / Serverless</td><td>$8,000</td><td>$9,100</td><td class="var-pos">+$1,100</td></tr>
+            <tr><td>Support (Business)</td><td>$28,000</td><td>$34,600</td><td class="var-pos">+$6,600</td></tr>
+            <tr><td style="font-weight:700">Total</td><td style="font-weight:700">$290,000</td><td style="font-weight:700">$331,400</td><td class="var-pos" style="font-weight:700;font-size:1rem">+$41,400</td></tr>
+          </tbody>
+        </table>
+
+        <div class="scenario-box">
+          The two biggest variances are EC2 (+$26K) and Data Transfer (+$14.6K). Support is also high (+$6.6K) — but note that AWS Business Support is a percentage of eligible spend, so if total spend is higher, support will be higher too. That's not an independent variance.
+        </div>
+
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start the drill-down →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    drillOpened = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Drill Down</div>
+        <h2>What drove EC2 +$26K and Data Transfer +$14.6K?</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Click each finding to understand the breakdown. This is the level of detail Finance needs to give a credible answer.</p>
+
+        <div class="drilldown-step">
+          <div class="ds-header">EC2 Variance — +$26,300</div>
+
+          <div class="drill-item" id="dd-0" onclick="openDrill(0)">
+            <span class="di-label">New prod-reporting-* instances (12 × m5.2xlarge)</span>
+            <span class="di-var var-pos">+$19,100</span>
+            <span class="di-hint">Click to understand →</span>
+          </div>
+          <div class="di-explain">Launched by Data team on the 6th. 12 × m5.2xlarge at $0.384/hr running 24/7 for 23 days = $2,548/day × $7.49 = ~$19,100. These instances weren't in the Q4 budget — the Data team launched a new reporting pipeline without a budget amendment request.</div>
+
+          <div class="drill-item" id="dd-1" onclick="openDrill(1)">
+            <span class="di-label">Increased on-demand pricing (Savings Plan coverage fell from 68% → 52%)</span>
+            <span class="di-var var-pos">+$7,200</span>
+            <span class="di-hint">Click to understand →</span>
+          </div>
+          <div class="di-explain">The new m5.2xlarge instances aren't covered by existing Savings Plans — they were provisioned on-demand. When on-demand instances run outside the committed compute pool, they pay full on-demand rates, which are 30–40% higher. The $7,200 is the premium paid vs. what the same compute would cost under a Savings Plan.</div>
+        </div>
+
+        <div class="drilldown-step">
+          <div class="ds-header">Data Transfer Variance — +$14,600</div>
+
+          <div class="drill-item" id="dd-2" onclick="openDrill(2)">
+            <span class="di-label">Reporting pipeline exporting results to S3 cross-region (us-east-1 → eu-west-1)</span>
+            <span class="di-var var-pos">+$11,900</span>
+            <span class="di-hint">Click to understand →</span>
+          </div>
+          <div class="di-explain">The new reporting pipeline writes results to an S3 bucket in eu-west-1 for the EU team. AWS charges $0.02/GB for inter-region data transfer. The pipeline is writing ~595 GB/day × 23 days = ~13,700 GB × $0.02 = $274 base, but the reporting job runs full data scans — actual transfer is ~595 GB/run × 1 run/hour = 13,700 GB/day. This was not planned in the egress budget.</div>
+
+          <div class="drill-item" id="dd-3" onclick="openDrill(3)">
+            <span class="di-label">CloudFront origin pulls increasing (new video feature in beta)</span>
+            <span class="di-var var-pos">+$2,700</span>
+            <span class="di-hint">Click to understand →</span>
+          </div>
+          <div class="di-explain">The video transcoding beta (launched week 3) pulls original files from S3 through CloudFront for processing. This created origin-pull transfer charges that weren't budgeted. At this scale it's a minor variance — but it will grow proportionally if the feature ships broadly.</div>
+        </div>
+
+        <div class="drilldown-step">
+          <div class="ds-header">Support Variance — explained</div>
+          <div class="drill-item" id="dd-4" onclick="openDrill(4)">
+            <span class="di-label">Business Support = 10% of eligible spend (auto-scaled with bill)</span>
+            <span class="di-var var-pos">+$6,600</span>
+            <span class="di-hint">Click to understand →</span>
+          </div>
+          <div class="di-explain">Not an independent variance. AWS Business Support is calculated as a percentage of eligible spend. Budget assumed $280K eligible → $28K support. Actual eligible spend was $296,800 → $29,680 (first $10K at 10%, next ~$286K at 7% blended ≈ $29,680). The overage is a consequence of higher service spend, not a separate action.</div>
+        </div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all findings to continue</span>
+          <button class="btn btn-primary" id="drill-next" onclick="nextStep()" disabled>Build the memo →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📝 The Variance Memo</div>
+        <h2>Draft the explanation for the CFO</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">This is what a well-structured variance memo looks like. Finance teams that do this well become trusted business partners — not just invoice processors.</p>
+
+        <div class="memo-block">
+          <div class="memo-from">To: CFO &nbsp;&nbsp; From: Finance / FinOps &nbsp;&nbsp; Re: October cloud spend variance (+$41,400)</div>
+
+          <strong>Summary:</strong> October came in $41,400 (14.3%) above budget. Two operational changes account for 92% of the variance. The remainder is a dependent consequence of higher eligible spend.
+          <br><br>
+          <strong>1. Data Team reporting pipeline — $26,000 (63%)</strong><br>
+          The Data team launched a new reporting infrastructure (12 × m5.2xlarge, us-east-1) on October 6th. This was not included in the Q4 budget. <span class="memo-highlight">These instances ran 23 days at ~$831/day.</span> Additionally, these instances fell outside existing Savings Plan coverage, paying on-demand rates (~36% premium vs. committed pricing).
+          <br><br>
+          <strong>2. Cross-region data transfer — $14,600 (35%)</strong><br>
+          The reporting pipeline exports results cross-region (us-east-1 → eu-west-1). AWS charges $0.02/GB for inter-region transfer. <span class="memo-highlight">This was not anticipated in the egress budget.</span> A secondary contributor is increased CloudFront origin pulls from the video beta (+$2,700).
+          <br><br>
+          <strong>3. Support (not independent) — $6,600</strong><br>
+          AWS Business Support scales with eligible spend. The support overage is a consequence of items 1 and 2, not an independent action.
+          <br><br>
+          <strong>Recommended actions:</strong><br>
+          (a) Require budget amendment request for workloads exceeding $5K/month before launch.<br>
+          (b) Review Savings Plan coverage to include new instance types.<br>
+          (c) Evaluate S3 replication (vs. cross-region transfer) for the EU reporting use case.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">One more question →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    classifyAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Classify — 150 pts</div>
+        <h2>How would you classify the root cause of this variance?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Understanding variance types helps Finance communicate the right fix to the right team.</p>
+        <div class="classify-opts">
+          <button class="c-opt" onclick="classify(0)">A: Forecasting error — Finance didn't model this correctly</button>
+          <button class="c-opt" onclick="classify(1)">B: Engineering waste — the instances should be shut down immediately</button>
+          <button class="c-opt" onclick="classify(2)">C: Volume + timing variance — real business work happened that wasn't in the budget cycle</button>
+          <button class="c-opt" onclick="classify(3)">D: Rate variance — the cost-per-unit changed unexpectedly</button>
+        </div>
+        <div id="classify-fb" style="display:none" class="tip-card">
+          ✅ <strong>Volume + timing variance.</strong> The Data team did real work — they launched a pipeline the business needed. The problem isn't that the work happened, it's that it wasn't surfaced to Finance before it launched. Variance categories matter because they drive different responses: rate variances require commitment or pricing action; forecasting errors require process fixes; volume variances require communication and possibly re-budgeting. Calling this "waste" would be wrong — it's intentional compute for a business purpose.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="classify-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 150;
+    var badge = score >= 120 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 120 ? 'Variance expert!' : score >= 60 ? 'Strong analysis!' : 'Keep digging!';
+    var desc = score >= 120 ? 'You correctly identified this as a volume/timing variance — real work that happened outside the budget cycle, not waste.' : 'The key skill: classify the variance correctly before recommending a fix. Rate, volume, timing, and forecasting variances each need a different response.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Variance reporting at the invoice level ("we're $40K over") is the start, not the end. The CFO needs to know: which service, why, and what's being done about it.</li>
+            <li>Dependent variances (like AWS Support scaling with spend) should be noted but not treated as independent action items. They're symptoms, not causes.</li>
+            <li>Variance types: <strong>rate</strong> (cost-per-unit changed), <strong>volume</strong> (more usage than planned), <strong>timing</strong> (work happened earlier/later than expected), <strong>forecast</strong> (Finance modelled incorrectly). Different types need different fixes.</li>
+            <li>Finance teams that show up with a classified variance and a recommended action are trusted partners. Teams that just report the number are invoice processors.</li>
+            <li>Process fix for recurrence: a budget amendment trigger for new workloads exceeding a defined threshold (e.g., $5K/month) gives Finance visibility before costs appear on the bill.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
