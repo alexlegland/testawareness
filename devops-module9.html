@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 9: Network Cost Architecture — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .flow-diagram { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; display:flex; flex-direction:column; gap:8px; }
+    .flow-row { display:flex; align-items:center; gap:8px; font-size:0.8rem; }
+    .flow-node { background:rgba(108,71,255,0.1); border:1px solid rgba(108,71,255,0.3); border-radius:8px; padding:5px 10px; font-weight:700; font-size:0.75rem; white-space:nowrap; }
+    .flow-node.internet { background:rgba(239,68,68,0.1); border-color:rgba(239,68,68,0.3); color:var(--danger); }
+    .flow-node.nat { background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.3); color:var(--warning); }
+    .flow-node.endpoint { background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.3); color:var(--success); }
+    .flow-arrow { color:var(--text-muted); font-size:1rem; }
+    .flow-cost { font-size:0.7rem; color:var(--accent); font-weight:700; margin-left:auto; white-space:nowrap; }
+
+    .path-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .path-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .path-card:hover:not(.open){ border-color:var(--primary); }
+    .path-card.open{ border-color:rgba(108,71,255,0.35); cursor:default; }
+    .pc-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .pc-icon { font-size:1.1rem; }
+    .pc-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .pc-badge { font-size:0.7rem; font-weight:700; padding:2px 9px; border-radius:20px; }
+    .pc-badge.expensive { background:rgba(239,68,68,0.15); color:var(--danger); }
+    .pc-badge.free { background:rgba(34,197,94,0.15); color:var(--success); }
+    .pc-badge.cheap { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .pc-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .path-card.open .pc-body { display:block; }
+
+    .scenario-quiz { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .sq-item { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; }
+    .sq-q { font-weight:700; font-size:0.88rem; margin-bottom:8px; }
+    .sq-opts { display:flex; gap:6px; flex-wrap:wrap; }
+    .sq-btn { padding:7px 13px; border-radius:8px; border:2px solid var(--border); background:transparent; cursor:pointer; font-size:0.79rem; font-weight:600; transition:all 0.15s; }
+    .sq-btn:hover:not(:disabled){ border-color:var(--primary); }
+    .sq-btn:disabled{ cursor:default; }
+    .sq-btn.correct{ border-color:var(--success); background:rgba(34,197,94,0.1); color:var(--success); }
+    .sq-btn.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+    .sq-fb { display:none; margin-top:8px; font-size:0.78rem; color:var(--text-muted); line-height:1.55; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, pathOpened=0, PATH_TOTAL=5;
+var sqAnswered=[false,false,false];
+var SQ_CORRECT=[1,0,2]; // VPC Endpoint, free, depends
+var SQ_LABELS=[['NAT Gateway','VPC Endpoint','Direct Connect'],['Free','$0.01/GB','$0.045/GB'],['NAT Gateway','VPC Endpoint','Either works, same cost']];
+var SQ_EXPLAIN=[
+  'VPC Interface Endpoint for S3 or DynamoDB costs $7.20/month/AZ but eliminates NAT Gateway processing charges ($0.045/GB). At 1 TB/month: NAT Gateway = $45/month in processing alone + $0.09/GB data transfer = $90. VPC Endpoint = $7.20/month + $0 processing + $0 transfer. Break-even: ~160 GB/month. Above that, VPC Endpoint wins.',
+  'Cross-AZ traffic within a VPC is $0.01/GB in each direction ($0.02/GB round-trip). Traffic within the same AZ is free. This is why multi-AZ architectures should minimise cross-AZ chatter — co-locating services that communicate heavily in the same AZ, or using AZ-aware load balancing, reduces this cost significantly.',
+  'For EC2 → S3 in the same region: use a VPC Gateway Endpoint (free) rather than routing through NAT Gateway ($0.045/GB). For private subnets calling AWS APIs (not S3/DynamoDB): use VPC Interface Endpoints or NAT Gateway. The key distinction: Gateway Endpoints (S3, DynamoDB) are free; Interface Endpoints cost $7.20/month/AZ but save NAT processing on high-volume traffic.'
+];
+
+function openPath(id){
+  var el=document.getElementById('path-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); pathOpened++;
+  if(pathOpened>=PATH_TOTAL) document.getElementById('path-next').disabled=false;
+}
+function answerSQ(sqIdx, chosen){
+  if(sqAnswered[sqIdx])return;
+  sqAnswered[sqIdx]=true;
+  var correct=(chosen===SQ_CORRECT[sqIdx]);
+  if(correct) score+=50;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  var btns=document.querySelectorAll('#sq-'+sqIdx+' .sq-btn');
+  btns.forEach(function(b,i){
+    b.disabled=true;
+    if(i===SQ_CORRECT[sqIdx]) b.classList.add('correct');
+    else if(i===chosen&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('sq-fb-'+sqIdx).style.display='block';
+  var allDone=sqAnswered.every(function(v){return v;});
+  if(allDone) document.getElementById('sq-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🌐 Network Costs</div>
+        <h2>The network is the most misunderstood line on the AWS bill</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Data transfer costs are invisible in architecture diagrams but material in the bill. The same byte of data can cost $0 or $0.09 depending entirely on how you've configured the path it travels. NAT Gateway, VPC endpoints, cross-AZ traffic, egress — each has a distinct pricing model that most platform engineers don't have memorised.</p>
+        <div class="scenario-box">
+          <strong>The hidden cost map:</strong><br>
+          — EC2 → S3 (same region, no endpoint): <strong>$0.09/GB</strong> out + <strong>$0.045/GB</strong> NAT processing<br>
+          — EC2 → S3 (same region, Gateway Endpoint): <strong>$0</strong><br>
+          — EC2 AZ-a → EC2 AZ-b (same VPC): <strong>$0.01/GB</strong> each direction<br>
+          — EC2 AZ-a → EC2 AZ-a (same AZ): <strong>$0</strong><br>
+          — EC2 → Internet (NAT Gateway): <strong>$0.045/GB processing</strong> + <strong>$0.09/GB egress</strong>
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Map the traffic paths →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    pathOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🌐 Traffic Path Analysis</div>
+        <h2>Five common traffic paths — click each to see the true cost</h2>
+        <div class="path-cards">
+          <div class="path-card" id="path-0" onclick="openPath(0)">
+            <div class="pc-head"><span class="pc-icon">🪣</span><span class="pc-title">Lambda (private subnet) → S3 bucket (same region)</span><span class="pc-badge expensive">$0.045/GB</span></div>
+            <div class="pc-body">Without a VPC Gateway Endpoint for S3: Lambda in private subnet → NAT Gateway → Internet Gateway → S3. You pay $0.045/GB NAT processing + $0.09/GB egress.<br><br>With a <strong>VPC Gateway Endpoint for S3</strong>: Lambda → S3 directly via AWS backbone. Cost: <strong>$0</strong>. The endpoint is free to create and free to use — no per-GB or per-hour charge for Gateway Endpoints (S3 and DynamoDB are the two services with free Gateway Endpoints).<br><br>If your Lambdas process S3 objects and you don't have a Gateway Endpoint configured, you're paying NAT charges for every invocation. This is one of the highest-ROI 5-minute fixes in AWS infrastructure.</div>
+          </div>
+          <div class="path-card" id="path-1" onclick="openPath(1)">
+            <div class="pc-head"><span class="pc-icon">📡</span><span class="pc-title">ECS task AZ-a → RDS in AZ-b (Multi-AZ read)</span><span class="pc-badge cheap">$0.01/GB</span></div>
+            <div class="pc-body">Cross-AZ traffic: $0.01/GB each direction. This sounds small — but consider a service that reads 50 GB/day from an RDS read replica in a different AZ: 50 GB × $0.02/GB (both directions) × 30 days = <strong>$30/month</strong> just in cross-AZ transfer.<br><br>At scale (EKS cluster with pods spread across 3 AZs, microservices calling each other): cross-AZ traffic can reach hundreds of GB/day across services.<br><br><strong>Fix</strong>: use AZ-aware load balancing. For EKS: set <code>topologyKeys: kubernetes.io/hostname</code> in Service spec or use Topology Aware Routing. For ECS: enable "availability zone rebalancing" and co-locate services that communicate heavily. For RDS: if latency allows, route to the replica in the same AZ.</div>
+          </div>
+          <div class="path-card" id="path-2" onclick="openPath(2)">
+            <div class="pc-head"><span class="pc-icon">🔑</span><span class="pc-title">EC2 → Secrets Manager (private subnet, no endpoint)</span><span class="pc-badge expensive">$0.045/GB + $7.20/mo</span></div>
+            <div class="pc-body">Calling Secrets Manager, SSM Parameter Store, KMS, ECR, or other AWS API services from a private subnet goes through NAT Gateway without a VPC Interface Endpoint.<br><br>VPC Interface Endpoints for these services: $7.20/month/AZ. Unlike Gateway Endpoints (S3/DynamoDB), Interface Endpoints have a per-hour charge ($0.01/hr) and per-GB charge ($0.01/GB for data processed).<br><br>When is the Interface Endpoint worth it? Rule of thumb: if you're routing &gt;160 GB/month through NAT to reach these services, the endpoint pays for itself. For Secrets Manager specifically: most calls are &lt;1 KB — volume is tiny, NAT cost is negligible. But for ECR image pulls (potentially hundreds of GB/month in a large cluster), an Interface Endpoint saves significantly.</div>
+          </div>
+          <div class="path-card" id="path-3" onclick="openPath(3)">
+            <div class="pc-head"><span class="pc-icon">🌍</span><span class="pc-title">ALB → ECS task (response to internet user)</span><span class="pc-badge expensive">$0.09/GB egress</span></div>
+            <div class="pc-body">Data transfer out to the internet: $0.09/GB for the first 10 TB/month, decreasing at higher tiers. This is the most significant data transfer cost for customer-facing services.<br><br>For response payloads: compress everything. gzip/brotli compression typically achieves 5–10× reduction on JSON/HTML responses. At 10 TB/month uncompressed → 1.5 TB compressed = $765 saved/month at the $0.09 rate. Enable compression at the ALB (response compression is automatic for CloudFront; for ALB, configure at the application layer).<br><br><strong>CloudFront</strong> offers lower egress rates ($0.085/GB) and eliminates origin hits for cached content. For APIs with cacheable responses (even 5-minute TTL on read endpoints), CloudFront pays for itself quickly at &gt;1 TB/month egress.</div>
+          </div>
+          <div class="path-card" id="path-4" onclick="openPath(4)">
+            <div class="pc-head"><span class="pc-icon">🔄</span><span class="pc-title">VPC Peering vs. Transit Gateway for multi-VPC traffic</span><span class="pc-badge cheap">$0.02/GB vs $0.05/GB</span></div>
+            <div class="pc-body">Connecting multiple VPCs:<br>— <strong>VPC Peering</strong>: $0.01/GB each direction ($0.02 round-trip). No hub cost. Simple 1:1 connections. Doesn't scale beyond ~5 VPCs (N² peering connections).<br>— <strong>Transit Gateway</strong>: $0.05/GB processed + $0.07/attachment/hr (~$50/month per attachment). Hub-and-spoke model scales to hundreds of VPCs.<br><br>Break-even analysis: Transit Gateway adds $0.03/GB over peering. If you have 3 VPCs, TGW costs $150+/month in attachment fees. VPC Peering costs $0 in infrastructure, only per-GB. For &lt;5 VPCs with moderate traffic, peering is almost always cheaper. Switch to TGW when: you have &gt;5 VPCs, need centralised routing/firewall, or the management overhead of N² peerings exceeds $50/attachment/month in engineering time.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 5 to continue</span>
+          <button class="btn btn-primary" id="path-next" onclick="nextStep()" disabled>Apply it →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    sqAnswered=[false,false,false];
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🌐 Scenario Quiz — 150 pts</div>
+        <h2>Three quick-fire network cost decisions</h2>
+        <div class="scenario-quiz">
+          <div class="sq-item" id="sq-0">
+            <div class="sq-q">Your Lambda functions process 500 GB/month from S3. They run in private subnets. What's the cheapest way to route this traffic?</div>
+            <div class="sq-opts">${SQ_LABELS[0].map(function(l,i){return '<button class="sq-btn" onclick="answerSQ(0,'+i+')">'+l+'</button>';}).join('')}</div>
+            <div class="sq-fb" id="sq-fb-0">${SQ_EXPLAIN[0]}</div>
+          </div>
+          <div class="sq-item" id="sq-1">
+            <div class="sq-q">Two ECS services in the same VPC, same region. Service A calls Service B 1,000 times/second. Both are in AZ-a. What's the data transfer cost?</div>
+            <div class="sq-opts">${SQ_LABELS[1].map(function(l,i){return '<button class="sq-btn" onclick="answerSQ(1,'+i+')">'+l+'</button>';}).join('')}</div>
+            <div class="sq-fb" id="sq-fb-1">${SQ_EXPLAIN[1]}</div>
+          </div>
+          <div class="sq-item" id="sq-2">
+            <div class="sq-q">EC2 instances in private subnets need to access S3 and DynamoDB. What should you create?</div>
+            <div class="sq-opts">${SQ_LABELS[2].map(function(l,i){return '<button class="sq-btn" onclick="answerSQ(2,'+i+')">'+l+'</button>';}).join('')}</div>
+            <div class="sq-fb" id="sq-fb-2">${SQ_EXPLAIN[2]}</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Answer all 3 to continue</span>
+          <button class="btn btn-primary" id="sq-next" onclick="nextStep()" disabled>Results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=130?'🏆':score>=70?'🎯':'📚'}</div>
+        <h2>${score>=130?'Network architect!':score>=70?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/150</span></div>
+        <p>Network costs are invisible in architecture diagrams but material in production bills. The right VPC topology costs almost nothing — the wrong one can cost more than your compute.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>VPC Gateway Endpoints for S3 and DynamoDB are free and take 5 minutes to create. If your private subnets access these services via NAT Gateway, you're paying $0.045/GB for nothing. This is the highest-ROI quick win in VPC networking.</li>
+          <li>Cross-AZ traffic ($0.01/GB each direction) becomes significant at scale. AZ-aware routing for microservices that communicate frequently can save 20–30% of network costs in dense clusters.</li>
+          <li>VPC Interface Endpoints have a per-hour cost ($0.01/hr = $7.20/month/AZ). Only deploy them for services with high traffic volume through NAT — Secrets Manager calls are typically too low-volume to justify.</li>
+          <li>VPC Peering (&lt;5 VPCs) is almost always cheaper than Transit Gateway. TGW adds $50+/month per attachment. Do the math before defaulting to TGW as the "enterprise" solution.</li>
+          <li>Enable response compression (gzip/brotli) at the application layer. 5–10× reduction in response size = 5–10× reduction in egress cost. It's the cheapest egress optimisation available.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Back to track →</a>
+          <a href="devops-module10.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
