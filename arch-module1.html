@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 1: The Cost of Availability — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tier-tabs { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+    .tier-tab { padding: 8px 18px; border-radius: 20px; border: 2px solid var(--border); background: var(--surface2); cursor: pointer; font-size: 0.82rem; font-weight: 700; transition: all 0.15s; }
+    .tier-tab.active { border-color: var(--primary); background: rgba(108,71,255,0.12); color: var(--primary); }
+
+    .tier-panel { display: none; }
+    .tier-panel.active { display: block; }
+
+    .cost-breakdown { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+    .cb-header { background: #17172a; padding: 9px 16px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    .cb-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem; gap: 10px; }
+    .cb-row:last-child { border-bottom: none; }
+    .cb-row.total { font-weight: 800; background: rgba(0,0,0,0.1); }
+    .cb-name { flex: 1; }
+    .cb-note { flex: 1; font-size: 0.72rem; color: var(--text-muted); }
+    .cb-cost { font-weight: 700; min-width: 80px; text-align: right; }
+    .cb-mult { font-size: 0.72rem; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+    .mult-1x { background: rgba(34,197,94,0.12); color: var(--success); }
+    .mult-2x { background: rgba(245,158,11,0.12); color: var(--warning); }
+    .mult-3x { background: rgba(239,68,68,0.12); color: var(--danger); }
+    .mult-hi { background: rgba(239,68,68,0.2); color: var(--danger); }
+
+    .sla-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+    .sla-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+    .sla-row { margin: 10px 0; }
+    .sla-label { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 1 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var quizAnswered = false;
+
+function switchTier(t) {
+  document.querySelectorAll('.tier-tab').forEach(function(b) { b.classList.toggle('active', b.dataset.tier === t); });
+  document.querySelectorAll('.tier-panel').forEach(function(p) { p.classList.toggle('active', p.dataset.panel === t); });
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🏗️ Architecture Cost</div>
+        <h2>Resilience isn't free — here's the price list</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">AWS offers multiple availability tiers. Each step up in resilience adds real cost. Architects who understand these multipliers make better trade-off decisions — they don't just default to "highest availability" because they never saw the bill.</p>
+        <div class="scenario-box">
+          <strong>Baseline system:</strong> A web application running on EC2 (m5.xlarge), an RDS MySQL database, and an Application Load Balancer. We'll see what each resilience tier costs for this same system.
+          <br><br>
+          <strong>m5.xlarge on-demand:</strong> $0.192/hr = $140/mo per instance<br>
+          <strong>RDS db.m5.xlarge single-AZ:</strong> $0.230/hr = $168/mo<br>
+          <strong>ALB:</strong> ~$18/mo base + $0.008/LCU-hr
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the tiers →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">💰 Cost by Resilience Tier</div>
+        <h2>Toggle between deployment patterns — same system, very different bills</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Each tier assumes the same baseline application. Click to compare.</p>
+        <div class="tier-tabs">
+          <div class="tier-tab active" data-tier="single" onclick="switchTier('single')">Single-AZ</div>
+          <div class="tier-tab" data-tier="multiaz" onclick="switchTier('multiaz')">Multi-AZ</div>
+          <div class="tier-tab" data-tier="multiregion" onclick="switchTier('multiregion')">Multi-Region Active-Active</div>
+        </div>
+
+        <div class="tier-panel active" data-panel="single">
+          <div class="cost-breakdown">
+            <div class="cb-header"><span>Single-AZ Deployment</span><span>Baseline — one AZ, no standby</span></div>
+            <div class="cb-row"><span class="cb-name">EC2 m5.xlarge × 2</span><span class="cb-note">App servers, on-demand</span><span class="cb-mult mult-1x">1×</span><span class="cb-cost">$280/mo</span></div>
+            <div class="cb-row"><span class="cb-name">RDS db.m5.xlarge</span><span class="cb-note">Single-AZ, no standby replica</span><span class="cb-mult mult-1x">1×</span><span class="cb-cost">$168/mo</span></div>
+            <div class="cb-row"><span class="cb-name">Application Load Balancer</span><span class="cb-note">Base + ~10M requests/mo</span><span class="cb-mult mult-1x">1×</span><span class="cb-cost">$26/mo</span></div>
+            <div class="cb-row"><span class="cb-name">EBS gp3 (200 GB total)</span><span class="cb-note">App + DB storage</span><span class="cb-mult mult-1x">1×</span><span class="cb-cost">$16/mo</span></div>
+            <div class="cb-row total"><span class="cb-name">Total</span><span class="cb-note"></span><span class="cb-mult mult-1x">1×</span><span class="cb-cost" style="color:var(--success)">$490/mo</span></div>
+          </div>
+          <div style="padding:12px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:10px;font-size:0.8rem;line-height:1.6;color:var(--text-muted)">
+            <strong style="color:var(--danger)">⚠️ Risk:</strong> An AZ outage takes down the entire application. RDS has no standby — recovery from backup (RTO: hours). Appropriate for dev/test or non-critical internal tools. Not appropriate for customer-facing production.
+          </div>
+          <div class="sla-row" style="margin-top:14px">
+            <div class="sla-label"><span>Estimated availability</span><span style="font-weight:700">~99.5%</span></div>
+            <div class="sla-bar"><div class="sla-fill" style="width:99.5%;background:var(--warning)"></div></div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">~3.6 hours downtime/year from AZ events alone</div>
+          </div>
+        </div>
+
+        <div class="tier-panel" data-panel="multiaz">
+          <div class="cost-breakdown">
+            <div class="cb-header"><span>Multi-AZ Deployment</span><span>Two AZs — standby for DB, redundant app tier</span></div>
+            <div class="cb-row"><span class="cb-name">EC2 m5.xlarge × 4</span><span class="cb-note">2 instances per AZ, ALB distributes</span><span class="cb-mult mult-2x">2×</span><span class="cb-cost">$560/mo</span></div>
+            <div class="cb-row"><span class="cb-name">RDS Multi-AZ db.m5.xlarge</span><span class="cb-note">Standby replica in second AZ — synchronous replication</span><span class="cb-mult mult-2x">2×</span><span class="cb-cost">$336/mo</span></div>
+            <div class="cb-row"><span class="cb-name">Application Load Balancer</span><span class="cb-note">ALB is multi-AZ by default</span><span class="cb-mult mult-1x">1×</span><span class="cb-cost">$26/mo</span></div>
+            <div class="cb-row"><span class="cb-name">EBS gp3 (400 GB — mirrored)</span><span class="cb-note">Replicated across AZs</span><span class="cb-mult mult-2x">2×</span><span class="cb-cost">$32/mo</span></div>
+            <div class="cb-row"><span class="cb-name">Cross-AZ data transfer</span><span class="cb-note">$0.01/GB between AZs — RDS replication + app traffic</span><span class="cb-mult mult-1x">new</span><span class="cb-cost">$18/mo</span></div>
+            <div class="cb-row total"><span class="cb-name">Total</span><span class="cb-note"></span><span class="cb-mult mult-2x">~2×</span><span class="cb-cost" style="color:var(--warning)">$972/mo</span></div>
+          </div>
+          <div style="padding:12px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:10px;font-size:0.8rem;line-height:1.6;color:var(--text-muted)">
+            <strong style="color:var(--success)">✅ Note:</strong> RDS Multi-AZ standby is not readable — it's a failover target only. You pay for a full instance but can't use it for read queries. RDS Read Replicas are separate and add cost on top of this.
+          </div>
+          <div class="sla-row" style="margin-top:14px">
+            <div class="sla-label"><span>Estimated availability</span><span style="font-weight:700">~99.99%</span></div>
+            <div class="sla-bar"><div class="sla-fill" style="width:99.99%;background:var(--success)"></div></div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">RDS Multi-AZ automatic failover: typically &lt;60–120 seconds</div>
+          </div>
+        </div>
+
+        <div class="tier-panel" data-panel="multiregion">
+          <div class="cost-breakdown">
+            <div class="cb-header"><span>Multi-Region Active-Active</span><span>Two independent regions, traffic split via Route 53</span></div>
+            <div class="cb-row"><span class="cb-name">EC2 m5.xlarge × 8</span><span class="cb-note">4 per region (each region is itself multi-AZ)</span><span class="cb-mult mult-hi">4×</span><span class="cb-cost">$1,120/mo</span></div>
+            <div class="cb-row"><span class="cb-name">RDS Multi-AZ × 2 regions</span><span class="cb-note">Primary + Multi-AZ standby in each region</span><span class="cb-mult mult-hi">4×</span><span class="cb-cost">$672/mo</span></div>
+            <div class="cb-row"><span class="cb-name">ALB × 2</span><span class="cb-note">One per region</span><span class="cb-mult mult-2x">2×</span><span class="cb-cost">$52/mo</span></div>
+            <div class="cb-row"><span class="cb-name">Route 53 health checks + latency routing</span><span class="cb-note">$0.75/check/mo + query costs</span><span class="cb-mult mult-1x">new</span><span class="cb-cost">$12/mo</span></div>
+            <div class="cb-row"><span class="cb-name">Cross-region DB replication</span><span class="cb-note">$0.02/GB — continuous replication between regions</span><span class="cb-mult mult-1x">new</span><span class="cb-cost">$85/mo</span></div>
+            <div class="cb-row"><span class="cb-name">EBS storage × 2</span><span class="cb-note">Both regions independently</span><span class="cb-mult mult-2x">2×</span><span class="cb-cost">$64/mo</span></div>
+            <div class="cb-row total"><span class="cb-name">Total</span><span class="cb-note"></span><span class="cb-mult mult-hi">~4×</span><span class="cb-cost" style="color:var(--danger)">$2,005/mo</span></div>
+          </div>
+          <div style="padding:12px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:10px;font-size:0.8rem;line-height:1.6;color:var(--text-muted)">
+            <strong style="color:var(--warning)">⚠️ Complexity note:</strong> Active-active multi-region requires solving distributed data consistency — write conflicts, replication lag, session affinity. This is an application-level challenge, not just infrastructure. Many teams need active-passive (failover) rather than active-active. Active-passive with Route 53 failover is cheaper but has higher RTO (minutes vs. seconds).
+          </div>
+          <div class="sla-row" style="margin-top:14px">
+            <div class="sla-label"><span>Estimated availability</span><span style="font-weight:700">~99.999%</span></div>
+            <div class="sla-bar"><div class="sla-fill" style="width:99.999%;background:var(--primary)"></div></div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Survives a full region outage with near-zero downtime — if implemented correctly</div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Test your reading →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 120 pts</div>
+        <h2>A startup's internal analytics dashboard runs on RDS Single-AZ to save money. The CTO says "it's fine to go down occasionally." Finance asks you: what's the hidden cost of this choice?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0, false, 0, 2)">A: None — single-AZ is the correct choice for non-critical workloads</button>
+          <button class="q-opt" onclick="answerQ(1, false, 0, 2)">B: The risk is just downtime — there's no cost difference to account for</button>
+          <button class="q-opt" onclick="answerQ(2, true, 120, 2)">C: RTO from a single-AZ RDS failure is hours (restore from snapshot) — if engineers are paged, that's real cost; also, "internal" tools often become depended on by revenue-generating processes</button>
+          <button class="q-opt" onclick="answerQ(3, false, 0, 2)">D: Single-AZ RDS has no failover at all — you'll permanently lose the data</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>The hidden cost is recovery time and scope creep.</strong> Single-AZ RDS doesn't automatically failover — recovery means restoring from the last automated snapshot (up to 5-minute data loss) and waiting for the instance to come back, typically 15–60 minutes. The "acceptable downtime" assumption breaks when the dashboard gets embedded in operational workflows. Also: engineer time for incident response at $100–150/hr fully loaded has a cost that isn't in the architecture decision. Multi-AZ for a $168/mo DB costs $168/mo extra — the question is whether that's worth it relative to the recovery cost.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 120;
+    var badge = score >= 100 ? '🏆' : score >= 50 ? '🎯' : '📚';
+    var headline = score >= 100 ? 'Resilience-cost aware!' : score >= 50 ? 'Good instincts!' : 'Revisit the tiers!';
+    var desc = 'Availability tiers have real price multipliers. Multi-AZ roughly doubles the bill; multi-region roughly quadruples it. The right tier depends on the actual SLA requirement — not defaults.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Single-AZ → Multi-AZ: roughly 2× compute and storage cost, plus cross-AZ transfer ($0.01/GB). RDS Multi-AZ standby is not readable — you pay for a full instance as a failover target only.</li>
+            <li>Multi-AZ → Multi-Region: roughly 2× again (4× vs. baseline). New costs include cross-region data transfer ($0.02/GB), Route 53 health checks, and replication lag management.</li>
+            <li>ALBs are multi-AZ by default — no extra cost there. The AZ cost is primarily in compute (EC2, RDS) and cross-AZ data transfer.</li>
+            <li>Multi-region active-active solves infrastructure availability but not data consistency — that's an application-level problem. Many teams need active-passive (cheaper, slower failover).</li>
+            <li>The right question is not "what's the highest availability we can afford?" but "what's the cost of downtime, and how does it compare to the cost of the resilience tier?"</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module2.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
