@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architect Module 8: Event-Driven Architecture Costs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .service-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0; }
+    @media(max-width:500px){ .service-grid{ grid-template-columns:1fr; } }
+    .svc-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .svc-card:hover:not(.open){ border-color:var(--warning); }
+    .svc-card.open{ border-color:rgba(245,158,11,0.4); cursor:default; }
+    .svc-head { padding:11px 14px; border-bottom:1px solid var(--border); }
+    .svc-name { font-weight:800; font-size:0.88rem; }
+    .svc-tagline { font-size:0.72rem; color:var(--text-muted); margin-top:2px; }
+    .svc-body { display:none; padding:11px 14px; font-size:0.78rem; line-height:1.65; color:var(--text-muted); }
+    .svc-card.open .svc-body { display:block; }
+    .svc-price { color:var(--accent); font-weight:700; }
+    .svc-hint { font-size:0.69rem; color:var(--primary); font-weight:600; padding:0 14px 9px; }
+    .svc-card.open .svc-hint { display:none; }
+
+    .scenario-cards { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .sc-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:12px 16px; }
+    .sc-title { font-weight:700; font-size:0.88rem; margin-bottom:6px; }
+    .sc-desc { font-size:0.78rem; color:var(--text-muted); margin-bottom:10px; line-height:1.55; }
+    .sc-options { display:flex; gap:6px; flex-wrap:wrap; }
+    .sc-btn { padding:7px 14px; border-radius:8px; border:2px solid var(--border); background:transparent; cursor:pointer; font-size:0.79rem; font-weight:600; transition:all 0.15s; }
+    .sc-btn:hover:not(:disabled){ border-color:var(--accent); }
+    .sc-btn:disabled{ cursor:default; }
+    .sc-btn.correct{ border-color:var(--success); background:rgba(34,197,94,0.1); color:var(--success); }
+    .sc-btn.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+    .sc-fb { display:none; margin-top:9px; font-size:0.78rem; color:var(--text-muted); line-height:1.55; padding:8px 10px; background:rgba(34,197,94,0.05); border-radius:8px; border:1px solid rgba(34,197,94,0.2); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, svcOpened=0, SVC_TOTAL=4;
+var scAnswered=[false,false,false];
+var SC_PTS=[50,50,50];
+var SC_CORRECT=[1,0,2]; // Kinesis, SQS, EventBridge
+var SC_LABELS=['SQS','Kinesis','SNS','EventBridge'];
+var SC_EXPLAIN=[
+  'Kinesis Data Streams is optimal for 500K events/second with ordering guarantees and replay. At $0.015/shard/hour + $0.014/million PUT records: ~20 shards needed = $216/month shard cost + $504/month PUT cost = ~$720/month. SQS would struggle with ordering at this throughput without FIFO queues (which cap at 3K TPS/queue). EventBridge caps at 10K events/second per default account limit. SNS is fan-out only — no consumer group tracking or replay.',
+  'SQS Standard Queue is optimal for work distribution across auto-scaling consumers. $0.40/million requests. At 2M jobs/day = 60M/month = $24/month. Near-zero cost for the value delivered. Kinesis would add shard management overhead with no benefit — you don\'t need ordering or replay for job queues. EventBridge is for routing events to multiple targets, not work distribution. SNS has no consumer-side acknowledgement (fire and forget).',
+  'EventBridge is the correct choice: native AWS service integration (S3 events, RDS events, EC2 events) routes directly to EventBridge without custom code. $1.00/million custom events + $0.20/million AWS service events. For 50 internal services with low event volume, monthly cost is typically &lt;$10. SQS would require each service to poll or push explicitly — no native integration. Kinesis is over-engineered for this routing pattern. SNS works but has no schema registry or filtering sophistication.'
+];
+
+function openSvc(id){
+  var el=document.getElementById('svc-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); svcOpened++;
+  if(svcOpened>=SVC_TOTAL) document.getElementById('svc-next').disabled=false;
+}
+function answerSC(scIdx, chosen){
+  if(scAnswered[scIdx])return;
+  scAnswered[scIdx]=true;
+  var correct=(chosen===SC_CORRECT[scIdx]);
+  if(correct) score+=SC_PTS[scIdx];
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  var btns=document.querySelectorAll('#sc-'+scIdx+' .sc-btn');
+  btns.forEach(function(b,i){
+    b.disabled=true;
+    if(i===SC_CORRECT[scIdx]) b.classList.add('correct');
+    else if(i===chosen&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('sc-fb-'+scIdx).style.display='block';
+  var allDone=scAnswered.every(function(v){return v;});
+  if(allDone) document.getElementById('sc-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(currentStep!==3)return;
+  var qAnswered=document.getElementById('q-fb');
+  if(qAnswered&&qAnswered.style.display==='block')return;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">⚡ Event-Driven Costs</div>
+        <h2>SQS, SNS, EventBridge, Kinesis — four tools, four cost models, one right answer per pattern</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Event-driven architectures can appear "cheap" because messaging services charge per-message rather than per-hour. But at scale the differences become massive — and the wrong choice can cost 10–100× more than necessary. The key is understanding what each service optimises for and at what volume its pricing model breaks down.</p>
+        <div class="scenario-box">
+          <strong>The challenge:</strong> Four different workloads, four different event patterns. Your job is to identify which messaging service is cost-optimal for each — and understand why the others fail on cost, not just features.
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Learn the pricing models →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    svcOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Pricing Models</div>
+        <h2>Click each service to understand its cost model and break-even points</h2>
+        <div class="service-grid">
+          <div class="svc-card" id="svc-0" onclick="openSvc(0)">
+            <div class="svc-head"><div class="svc-name">📬 SQS</div><div class="svc-tagline">Simple Queue Service</div></div>
+            <div class="svc-hint">Click to explore →</div>
+            <div class="svc-body">
+              <span class="svc-price">$0.40/million requests</span> (first 1M free/month)<br><br>
+              Standard queue: unlimited throughput, at-least-once delivery, no ordering. FIFO queue: exactly-once, ordered, but capped at 3,000 TPS (or 300 TPS without batching).<br><br>
+              <strong>Breaks even vs Kinesis at:</strong> ~5M messages/day. Below that, SQS is almost always cheaper (no shard cost). Above that with ordering requirements, Kinesis wins.<br><br>
+              <strong>Hidden cost:</strong> Long-polling is free, but short-polling burns requests. Empty receives count as requests. An idle consumer doing 20 polls/second = 1.7M requests/day = $0.68/day for doing nothing.
+            </div>
+          </div>
+          <div class="svc-card" id="svc-1" onclick="openSvc(1)">
+            <div class="svc-head"><div class="svc-name">📡 SNS</div><div class="svc-tagline">Simple Notification Service</div></div>
+            <div class="svc-hint">Click to explore →</div>
+            <div class="svc-body">
+              <span class="svc-price">$0.50/million publishes + delivery costs</span><br><br>
+              Fan-out pattern: one message to many subscribers (SQS, Lambda, HTTP, email). No consumer-side acknowledgement or replay. Fire-and-forget.<br><br>
+              <strong>Delivery pricing:</strong> SQS delivery free. Lambda delivery free. HTTP $0.60/million. Email $2.00/100K.<br><br>
+              <strong>Best for:</strong> Broadcast notifications where each subscriber needs its own copy. Not for work distribution (SQS) or stream processing (Kinesis). SNS → SQS fan-out is a common pattern for durable multi-consumer delivery without Kinesis shard cost.
+            </div>
+          </div>
+          <div class="svc-card" id="svc-2" onclick="openSvc(2)">
+            <div class="svc-head"><div class="svc-name">🌊 Kinesis Data Streams</div><div class="svc-tagline">Real-time streaming</div></div>
+            <div class="svc-hint">Click to explore →</div>
+            <div class="svc-body">
+              <span class="svc-price">$0.015/shard/hour + $0.014/million PUT records</span><br><br>
+              Shards = throughput units. Each shard: 1 MB/s write, 2 MB/s read, up to 1,000 records/second. Ordered, replayable up to 365 days retention.<br><br>
+              <strong>The fixed cost trap:</strong> Even at zero traffic, you pay $0.015/shard/hour. 10 shards = $108/month at 0 messages. SQS: $0 at 0 messages.<br><br>
+              <strong>On-demand mode:</strong> Removes shard management, charges $0.08/million records + $0.04/GB read. Cost-effective for bursty/unpredictable streams — no idle shard cost.<br><br>
+              <strong>Enhanced fan-out:</strong> $0.015/shard/hour + $0.013/GB for dedicated read throughput per consumer. Expensive but eliminates read contention.
+            </div>
+          </div>
+          <div class="svc-card" id="svc-3" onclick="openSvc(3)">
+            <div class="svc-head"><div class="svc-name">🔀 EventBridge</div><div class="svc-tagline">Serverless event bus</div></div>
+            <div class="svc-hint">Click to explore →</div>
+            <div class="svc-body">
+              <span class="svc-price">$1.00/million custom events + $0.20/million AWS service events</span> (first 1M/month free)<br><br>
+              Native AWS service integrations: S3, RDS, EC2, CodePipeline, 200+ sources → EventBridge → Lambda, SQS, Step Functions, API Gateway. No code needed for routing.<br><br>
+              <strong>Schema registry:</strong> $0.10/million events discovered. Validates and evolves event schemas — prevents consumer breakage on schema changes.<br><br>
+              <strong>Pipes:</strong> $0.40/million events — enrichment + filtering + routing in a single managed resource. Often cheaper than a Lambda just to route events.<br><br>
+              <strong>Breaks down at:</strong> Very high throughput (default 10K events/second limit) or when ordering guarantees are needed. At &gt;50M events/month, Kinesis becomes cheaper than EventBridge custom events.
+            </div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 to continue</span>
+          <button class="btn btn-primary" id="svc-next" onclick="nextStep()" disabled>Match workloads →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    scAnswered=[false,false,false];
+    var scenarios=[
+      { title:'Real-time clickstream — 500,000 events/second, ordered per user session, 7-day replay window needed', desc:'Multiple consumers: analytics, fraud detection, personalisation engine' },
+      { title:'Background job queue — 2 million image processing jobs/day, workers auto-scale 0→200, no ordering needed', desc:'Jobs are independent, failure should retry, ~500KB payload per job' },
+      { title:'Internal platform events — 50 microservices emit lifecycle events (deployments, DB changes, alarms) to 30 subscriber services', desc:'Low volume, native AWS sources (RDS, EC2, S3), needs schema validation' }
+    ];
+    var html='<div class="step-card"><div class="step-type challenge">⚡ Scenario Matching — 150 pts total</div><h2>Choose the cost-optimal messaging service for each workload</h2><div class="scenario-cards">';
+    scenarios.forEach(function(s,i){
+      html+='<div class="sc-card" id="sc-'+i+'"><div class="sc-title">'+s.title+'</div><div class="sc-desc">'+s.desc+'</div><div class="sc-options">';
+      SC_LABELS.forEach(function(l,j){
+        html+='<button class="sc-btn" onclick="answerSC('+i+','+j+')">'+l+'</button>';
+      });
+      html+='</div><div class="sc-fb" id="sc-fb-'+i+'">'+SC_EXPLAIN[i]+'</div></div>';
+    });
+    html+='</div><div class="step-actions"><span style="font-size:0.8rem;color:var(--text-muted)">Answer all 3 to continue</span><button class="btn btn-primary" id="sc-next" onclick="nextStep()" disabled>Final question →</button></div></div>';
+    c.innerHTML=html;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=200?'🏆':score>=120?'🎯':'📚'}</div>
+        <h2>${score>=200?'Event architect!':score>=120?'Solid instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/150</span></div>
+        <p>Event-driven architectures live and die on throughput math. Getting the service selection right at design time prevents an expensive migration at scale.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Kinesis has a fixed shard cost that makes it expensive at low throughput but efficient at very high throughput. For &lt;10K events/second with no ordering requirement, SQS is almost always cheaper.</li>
+          <li>SQS idle consumer cost is a real billing trap: short-polling at high frequency generates request charges even with no messages. Always use long-polling (WaitTimeSeconds=20).</li>
+          <li>EventBridge is the right choice for native AWS service integration routing — zero custom code, built-in filtering, schema registry. For internal platform events from AWS sources, it's often 10× cheaper than building a Lambda router.</li>
+          <li>SNS→SQS fan-out is a powerful pattern: SNS delivers one message to multiple SQS queues, each with independent consumers and retention. Durable multi-consumer fan-out without Kinesis shard cost.</li>
+          <li>Kinesis On-Demand mode removes the idle shard cost trap — pay per record processed. If your stream throughput is unpredictable or you're not at steady-state, On-Demand is safer. Switch to Provisioned shards when you know your baseline and want to optimise cost.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

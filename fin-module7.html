@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 7: Regression Forecasting — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .chart-area { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; }
+    .chart-title { font-size:0.78rem; font-weight:700; margin-bottom:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+    .chart-bars { display:flex; align-items:flex-end; gap:4px; height:80px; }
+    .bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .bar { width:100%; border-radius:4px 4px 0 0; min-height:4px; transition:height 0.3s; }
+    .bar.actual { background:var(--primary); }
+    .bar.forecast { background:rgba(108,71,255,0.35); border:1px dashed var(--primary); }
+    .bar.driver { background:var(--accent); }
+    .bar-label { font-size:0.6rem; color:var(--text-muted); }
+
+    .driver-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin:10px 0; }
+    .driver-table th { background:#17172a; padding:8px 12px; text-align:left; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .driver-table td { padding:9px 12px; border-bottom:1px solid var(--border); }
+    .driver-table tr:last-child td { border-bottom:none; }
+    .coeff-pos { color:var(--accent); font-weight:700; }
+    .coeff-neg { color:var(--success); font-weight:700; }
+
+    .model-toggle { display:flex; gap:8px; margin:12px 0; }
+    .mt-btn { flex:1; padding:9px; border-radius:10px; border:2px solid var(--border); background:var(--surface2); cursor:pointer; font-size:0.8rem; font-weight:700; transition:all 0.15s; }
+    .mt-btn.active { border-color:var(--primary); background:rgba(108,71,255,0.1); color:var(--primary); }
+    .model-panel { display:none; } .model-panel.active { display:block; }
+    .model-box { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:13px 16px; font-size:0.82rem; line-height:1.8; margin:8px 0; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, activeModel='naive', quizAnswered=false;
+
+function switchModel(m){
+  activeModel=m;
+  document.querySelectorAll('.mt-btn').forEach(function(b){ b.classList.toggle('active',b.dataset.model===m); });
+  document.querySelectorAll('.model-panel').forEach(function(p){ p.classList.toggle('active',p.dataset.panel===m); });
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">📈 Forecasting</div>
+        <h2>"The spend went up 18% — nobody told us it would" is a solvable problem</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Most cloud finance teams forecast by extrapolating last month's bill. This works when spend is flat, but fails as a company scales — because cloud cost is driven by <strong>business activity</strong>, not time. A regression model ties cloud cost to the business drivers that actually cause it to change.</p>
+        <div class="scenario-box">
+          <strong>Your company:</strong><br>
+          — SaaS analytics platform, $34M ARR, growing 35% YoY<br>
+          — Cloud spend: $280,000/month, growing 42% YoY (outpacing revenue)<br>
+          — Cost drivers: active users, data processed (GB/day), API calls/month<br><br>
+          Finance wants a Q3 forecast. Sales is projecting 400 new enterprise customers (avg 50 users each) in Q3. Data ingestion expected to grow 60% with the new customer segment. A time-series extrapolation would say "spend grows 3.5%/month." A driver-based regression would say something different.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Build the model →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📈 Regression Model</div>
+        <h2>Building a driver-based forecast — the mechanics</h2>
+        <p style="color:var(--text-muted);margin-bottom:12px">Regression analysis asks: for every unit increase in a business driver, how much does cloud cost increase? Here's what the historical data reveals:</p>
+        <table class="driver-table">
+          <thead><tr><th>Driver</th><th>Unit</th><th>Coefficient</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>Active users</td><td>per 1,000 users</td><td class="coeff-pos">+$4,200/mo</td><td>Each 1K users adds $4.2K to the monthly bill (app servers, DB reads)</td></tr>
+            <tr><td>Data ingested</td><td>per 1 TB/day</td><td class="coeff-pos">+$8,800/mo</td><td>Dominant cost driver — ETL, storage, query compute scales steeply</td></tr>
+            <tr><td>API calls</td><td>per 100M calls/mo</td><td class="coeff-pos">+$1,100/mo</td><td>Lambda + API Gateway; linear at current scale</td></tr>
+            <tr><td>Baseline (fixed)</td><td>—</td><td class="coeff-neg">$42,000/mo</td><td>Fixed infra: VPCs, NAT gateways, monitoring, security tooling</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px"><strong>Model R² = 0.94</strong> — 94% of historical cost variance explained by these three drivers. Good fit.</p>
+        <div class="chart-area">
+          <div class="chart-title">Historical actual spend vs. model prediction (12 months)</div>
+          <div class="chart-bars">
+            ${[195,204,211,220,228,237,241,251,258,264,272,280].map(function(v,i){
+              var h=Math.round((v/300)*70);
+              return '<div class="bar-wrap"><div class="bar actual" style="height:'+h+'px"></div><div class="bar-label">M'+(i+1)+'</div></div>';
+            }).join('')}
+          </div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Actual spend (purple bars) — model closely tracks; no major unexplained spikes</div>
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Apply to Q3 forecast →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📈 Q3 Forecast — 160 pts</div>
+        <h2>What does the regression model predict for Q3?</h2>
+        <p style="color:var(--text-muted);margin-bottom:12px">Sales inputs for Q3: +20,000 new users, data ingestion growing from 8 TB/day to 13 TB/day, API calls growing 20% from 500M/month. Toggle each approach:</p>
+        <div class="model-toggle">
+          <button class="mt-btn active" data-model="naive" onclick="switchModel('naive')">📊 Naive Extrapolation</button>
+          <button class="mt-btn" data-model="regression" onclick="switchModel('regression')">📈 Driver Regression</button>
+          <button class="mt-btn" data-model="diff" onclick="switchModel('diff')">⚡ Difference</button>
+        </div>
+        <div class="model-panel active" data-panel="naive">
+          <div class="model-box">
+            <strong>Naive: extend the trend</strong><br>
+            Current: $280K/mo · 12-month avg growth: 3.5%/mo<br>
+            Q3 average (3 months forward): $280K × (1.035)³ = <strong style="color:var(--accent)">$310,000/month</strong><br>
+            Q3 total: $930,000<br><br>
+            <span style="color:var(--text-muted)">Assumes the business grows at historical rate. Ignores the specific drivers Sales has projected for Q3.</span>
+          </div>
+        </div>
+        <div class="model-panel" data-panel="regression">
+          <div class="model-box">
+            <strong>Driver regression: use the inputs</strong><br>
+            Base: $42,000<br>
+            +20K users ÷ 1K × $4,200 = +$84,000<br>
+            +5 TB/day × $8,800 = +$44,000<br>
+            +100M calls × $1,100 = +$1,100<br>
+            <strong>Q3 end-state: $42K + $280K (current) + $129,100 = <span style="color:var(--danger)">~$409,100/month</span></strong><br><br>
+            <span style="color:var(--text-muted)">The incremental drivers in Q3 add $129K/month on top of current run rate. Not gradual — enterprise customers onboard fast.</span>
+          </div>
+        </div>
+        <div class="model-panel" data-panel="diff">
+          <div class="model-box">
+            <strong>The difference: $99,100/month</strong><br>
+            Naive says $310K. Regression says $409K. The gap is <strong style="color:var(--danger)">$99,100/month</strong> — or $297,300 under-budgeted for Q3.<br><br>
+            This gap comes from the data ingestion driver: 5 additional TB/day from the new enterprise segment is a step-change, not a gradual trend. A time-series extrapolation doesn't know that Sales signed 400 enterprise customers with data-heavy workloads. The regression model does — because it's connected to the business driver.
+          </div>
+        </div>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: The naive extrapolation is more conservative and appropriate for budget planning</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Neither model is reliable — cloud forecasting is inherently too uncertain for precision</button>
+          <button class="q-opt" onclick="answerQ(2,true,160,2)">C: The driver regression is more useful because it surfaces a specific risk (data ingestion step-change from enterprise onboarding) that the naive model masks</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Use the average of both models to hedge the uncertainty</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Driver-based models surface specific risks.</strong> The $99K/month gap isn't just a number — it's a story: "Our new enterprise segment has 5× the data ingestion intensity of our SMB customers. If Sales hits its Q3 target, our cloud bill goes up 46%, not 11%." That's actionable for Finance (budget revision), Engineering (capacity planning), and Product (pricing — do enterprise customers pay for their data intensity?). The naive model would have delivered a budget surprise. The regression model delivers a conversation. That's the difference between a financial model and a strategic tool.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=130?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=130?'Forecasting expert!':score>=60?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>A regression model with R²=0.94 doesn't just forecast — it explains. It tells you which business activities drive cost and how much. That's a management tool, not just a spreadsheet.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Time-series extrapolation fails when business mix changes. A new customer segment with different unit economics invalidates historical trend lines.</li>
+          <li>Identify the 2–3 cost drivers that explain 90%+ of spend variance. For most SaaS companies: active users, data volume, and compute-intensive feature adoption are the top three.</li>
+          <li>Build the regression model in partnership with Sales/CS — you need their growth inputs (new users, data estimates) to generate a forward-looking forecast. The model is the conversation starter.</li>
+          <li>R² is your model quality metric. Below 0.85: missing a key driver. Above 0.90: good enough for planning. The unexplained variance (1 − R²) is your uncertainty band.</li>
+          <li>The goal isn't precision — it's early warning. A driver-based model alerts Finance to a budget risk 90 days before the bill arrives. That's time to adjust pricing, add budgets, or renegotiate capacity.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="fin-module8.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 8: Multi-Account Cost Strategy — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .account-map { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin:14px 0; }
+    .acct-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:12px 14px; cursor:pointer; transition:all 0.15s; }
+    .acct-card:hover:not(.open){ border-color:var(--primary); transform:translateY(-2px); }
+    .acct-card.open{ border-color:rgba(108,71,255,0.4); cursor:default; background:rgba(108,71,255,0.04); }
+    .ac-icon  { font-size:1.4rem; margin-bottom:6px; }
+    .ac-name  { font-weight:800; font-size:0.82rem; margin-bottom:4px; }
+    .ac-spend { font-size:1.1rem; font-weight:900; color:var(--accent); margin-bottom:4px; }
+    .ac-hint  { font-size:0.68rem; color:var(--primary); font-weight:600; }
+    .ac-body  { display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-size:0.76rem; line-height:1.6; color:var(--text-muted); }
+    .acct-card.open .ac-body { display:block; }
+    .acct-card.open .ac-hint { display:none; }
+
+    .benefit-list { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .benefit-item { display:flex; gap:12px; align-items:flex-start; padding:10px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; }
+    .bi-icon { font-size:1.2rem; flex-shrink:0; }
+    .bi-body { flex:1; font-size:0.82rem; line-height:1.6; }
+    .bi-body strong { color:var(--text); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, acctOpened=0, ACCT_TOTAL=6, quizAnswered=false;
+
+function openAcct(id){
+  var el=document.getElementById('acct-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); acctOpened++;
+  if(acctOpened>=ACCT_TOTAL) document.getElementById('acct-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🏢 Multi-Account</div>
+        <h2>One account was never the right answer</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Running production, staging, and development in the same AWS account is an anti-pattern — for both security and cost. Multi-account architecture with AWS Organizations is the standard for companies past the startup phase. It also unlocks cost benefits that a single account can't provide.</p>
+        <div class="scenario-box">
+          <strong>AWS Organizations — cost-relevant features:</strong><br>
+          — <strong>Consolidated billing:</strong> all accounts in the org share Savings Plans, Reserved Instance coverage, and free tier usage<br>
+          — <strong>SCPs (Service Control Policies):</strong> guard rails that prevent expensive misconfigurations at the account level<br>
+          — <strong>Cost allocation by account:</strong> natural boundary for chargeback — each team/environment gets its own account and its own bill<br>
+          — <strong>Account-level quotas:</strong> prevent one team's runaway workload from consuming org-wide capacity
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Explore the account structure →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    acctOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🏢 Account Explorer</div>
+        <h2>A typical account structure — click each account to understand its cost role</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Total org spend: $340,000/month across 6 accounts.</p>
+        <div class="account-map">
+          <div class="acct-card" id="acct-0" onclick="openAcct(0)">
+            <div class="ac-icon">🏛️</div><div class="ac-name">Management / Root</div>
+            <div class="ac-spend">$0</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">The management account is the billing root — it pays the consolidated bill and manages SCPs and account structure. <strong>Best practice: run no workloads here.</strong> If a workload runs in the management account, it can't be easily restricted by SCPs (which don't apply to the management account itself). Keep it clean: just billing, Organizations, and IAM Identity Center.</div>
+          </div>
+          <div class="acct-card" id="acct-1" onclick="openAcct(1)">
+            <div class="ac-icon">🔒</div><div class="ac-name">Security / Audit</div>
+            <div class="ac-spend">$2,100/mo</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">Centralised security tooling: CloudTrail (org-wide trail), AWS Config, GuardDuty, Security Hub. Cost here is mostly storage (S3 for logs) and compute for security agents. Keeping security tooling in a separate account prevents teams from disabling it (SCPs can enforce read-only access from member accounts). At $2,100/mo for org-wide audit coverage across $340K of spend, this is a fixed cost that scales sub-linearly.</div>
+          </div>
+          <div class="acct-card" id="acct-2" onclick="openAcct(2)">
+            <div class="ac-icon">🔧</div><div class="ac-name">Shared Services</div>
+            <div class="ac-spend">$28,400/mo</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">Centralised platform services: internal DNS (Route 53 Resolver), Transit Gateway for cross-account networking, centralised ECR (container registry), shared Secrets Manager. Running these centrally avoids duplication — each team account doesn't need its own VPN gateway or container registry. Cost attribution challenge: shared services costs need to be allocated back to consumers via showback/chargeback.</div>
+          </div>
+          <div class="acct-card" id="acct-3" onclick="openAcct(3)">
+            <div class="ac-icon">🚀</div><div class="ac-name">Production</div>
+            <div class="ac-spend">$248,000/mo</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">Customer-facing workloads only. SCPs enforce: no public S3 buckets, require encryption at rest, block unsupported regions, restrict to approved instance families. Savings Plans purchased in the management account or production account automatically share across all org accounts — meaning Savings Plans bought here also cover dev/staging workloads. This is a key financial benefit of consolidated billing.</div>
+          </div>
+          <div class="acct-card" id="acct-4" onclick="openAcct(4)">
+            <div class="ac-icon">🧪</div><div class="ac-name">Staging</div>
+            <div class="ac-spend">$41,200/mo</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">Pre-production environment. Common cost trap: staging is sized identically to production "to make tests realistic." At $41,200/mo, it's 17% of production cost — higher than typical (5–10% is more common for a well-sized staging environment). Staging doesn't need multi-AZ RDS, 20-instance minimum ASGs, or full data replication. A periodic staging cost review can often cut this 40–60% without affecting test validity.</div>
+          </div>
+          <div class="acct-card" id="acct-5" onclick="openAcct(5)">
+            <div class="ac-icon">🛠️</div><div class="ac-name">Development</div>
+            <div class="ac-spend">$20,300/mo</div>
+            <div class="ac-hint">Click to explore</div>
+            <div class="ac-body">Developer sandboxes. SCP guardrails here prevent expensive instance types (e.g., deny p3, p4d GPU families), enforce instance stop schedules (Lambda + EventBridge), and set account-level billing alarms. The dev account being separate means a developer's experiment can't accidentally affect production — and the cost is naturally isolated. At $20,300/mo for a 40-person engineering team, that's ~$508/dev/month — worth tracking per-engineer or per-team.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Explore all 6 accounts to continue</span>
+          <button class="btn btn-primary" id="acct-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 150 pts</div>
+        <h2>Your team purchases a $50,000/year Compute Savings Plan in the production account. The dev account has $8,000/month of EC2 spend on the same instance families. Does the Savings Plan apply to dev account spend?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,1)">A: No — Savings Plans only apply within the account where they were purchased</button>
+          <button class="q-opt" onclick="answerQ(1,true,150,1)">B: Yes — Compute Savings Plans automatically share across all accounts in the AWS Organization via consolidated billing</button>
+          <button class="q-opt" onclick="answerQ(2,false,0,1)">C: Only if the dev account opts in to resource sharing via AWS RAM</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,1)">D: Only for Reserved Instances — Savings Plans don't share across accounts</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Savings Plans and Reserved Instances automatically share across org accounts.</strong> This is one of the most valuable financial benefits of AWS Organizations consolidated billing. A Compute Savings Plan purchased in any account applies org-wide — AWS applies it first to the purchasing account, then to member accounts if there's remaining capacity. This means you don't need to buy separate Savings Plans per account. It also means FinOps teams should centralise commitment purchasing in the management or a dedicated account to ensure optimal sharing across all environments.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=120?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=120?'Multi-account expert!':score>=60?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/150</span></div>
+        <p>Multi-account architecture is both a security and a cost practice. The account boundary is the cleanest cost allocation unit available in AWS.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>AWS Organizations consolidated billing shares Savings Plans and Reserved Instances across all member accounts automatically — purchasing commitments centrally maximises coverage.</li>
+          <li>The management account should have zero workloads. SCPs don't apply to it, so anything running there is outside your cost and security guardrails.</li>
+          <li>SCPs are powerful cost guardrails: deny expensive GPU instance families in dev, enforce instance scheduler tags, block unsupported regions. They prevent expensive mistakes at the infrastructure level.</li>
+          <li>Staging environments often mirror production sizing "for realism" — but don't need multi-AZ, high-availability configuration, or large minimum ASG capacity. Regular staging cost reviews typically find 40–60% savings.</li>
+          <li>Per-account billing is the cleanest showback mechanism: each team's AWS account IS their cost allocation unit, without needing complex tag-based attribution.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
