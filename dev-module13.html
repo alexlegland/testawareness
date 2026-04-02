@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 13: The Retry Storm — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .code-block { background:#0d0d1a; border:1px solid var(--border); border-radius:10px; padding:14px 16px; font-family:'Courier New',monospace; font-size:0.78rem; line-height:1.7; overflow-x:auto; margin:10px 0; position:relative; }
+    .code-block .ln { color:#444; user-select:none; margin-right:12px; }
+    .kw { color:#c084fc; }
+    .fn { color:#60a5fa; }
+    .num { color:#f59e0b; }
+    .str { color:#34d399; }
+    .cm { color:#6b7280; font-style:italic; }
+    .hl { background:rgba(239,68,68,0.12); display:block; margin:0 -16px; padding:0 16px; border-left:3px solid var(--danger); }
+
+    .multiplier-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0; }
+    @media(max-width:500px){ .multiplier-grid{ grid-template-columns:1fr; } }
+    .mult-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:11px 13px; }
+    .mult-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:4px; }
+    .mult-val { font-size:1.4rem; font-weight:900; }
+    .mult-val.ok { color:var(--success); }
+    .mult-val.warn { color:var(--warning); }
+    .mult-val.bad { color:var(--danger); }
+    .mult-desc { font-size:0.72rem; color:var(--text-muted); margin-top:3px; }
+
+    .pattern-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .p-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .p-card:hover:not(.open){ border-color:var(--primary); }
+    .p-card.open{ border-color:rgba(108,71,255,0.4); cursor:default; }
+    .p-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .ph-icon { font-size:1.1rem; }
+    .ph-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .ph-tag { font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:20px; }
+    .ph-tag.bad { background:rgba(239,68,68,0.15); color:var(--danger); }
+    .ph-tag.good { background:rgba(34,197,94,0.15); color:var(--success); }
+    .p-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .p-card.open .p-body { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, pOpened=0, P_TOTAL=4, quizAnswered=false;
+
+function openP(id){
+  var el=document.getElementById('p-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); pOpened++;
+  if(pOpened>=P_TOTAL) document.getElementById('p-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🌪️ Retry Storm</div>
+        <h2>A single bug in retry logic can multiply your AWS bill by 50×</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Retries are essential — they make distributed systems resilient. But retry logic written without cost awareness becomes a billing amplifier. When a downstream service degrades, a poorly configured retry loop doesn't just add latency — it turns every failed request into dozens of billable events across Lambda, SQS, DynamoDB, and API Gateway simultaneously.</p>
+        <div class="scenario-box">
+          <strong>What happened:</strong><br>
+          — Friday 6pm: DynamoDB throttling event begins (burst limit exceeded)<br>
+          — Lambda function: 3 retries with no backoff, 1-second timeout each<br>
+          — SQS: message not deleted on failure → re-enqueued after visibility timeout<br>
+          — Dead letter queue: not configured → messages loop indefinitely<br>
+          — Duration: 4 hours until on-call engineer notices<br><br>
+          Result: <strong style="color:var(--danger)">$3,200 in unexpected Lambda + DynamoDB charges</strong> from what should have been a $4 event.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Diagnose the code →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🌪️ Code Review</div>
+        <h2>Find the retry amplification bugs in this Lambda function</h2>
+        <div class="code-block">
+<span class="ln">1</span> <span class="kw">async function</span> <span class="fn">processOrder</span>(event) {
+<span class="ln">2</span>   <span class="kw">const</span> messages = event.Records;
+<span class="ln">3</span>   <span class="kw">for</span> (<span class="kw">const</span> msg <span class="kw">of</span> messages) {
+<span class="ln">4</span>     <span class="kw">const</span> order = JSON.parse(msg.body);
+<span class="hl"><span class="ln">5</span>     <span class="kw">await</span> <span class="fn">writeToDatabase</span>(order);   <span class="cm">// no try/catch</span></span>
+<span class="ln">6</span>   }
+<span class="ln">7</span> }
+<span class="ln">8</span>
+<span class="ln">9</span> <span class="kw">async function</span> <span class="fn">writeToDatabase</span>(order) {
+<span class="hl"><span class="ln">10</span>  <span class="kw">let</span> retries = <span class="num">3</span>;                   <span class="cm">// fixed retry count</span></span>
+<span class="ln">11</span>  <span class="kw">while</span> (retries > <span class="num">0</span>) {
+<span class="ln">12</span>    <span class="kw">try</span> {
+<span class="ln">13</span>      <span class="kw">await</span> dynamo.<span class="fn">put</span>(order).<span class="fn">promise</span>();
+<span class="ln">14</span>      <span class="kw">return</span>;
+<span class="ln">15</span>    } <span class="kw">catch</span> (e) {
+<span class="hl"><span class="ln">16</span>      retries--;                        <span class="cm">// no delay between retries</span></span>
+<span class="hl"><span class="ln">17</span>      <span class="cm">// no check: is this error retryable?</span></span>
+<span class="ln">18</span>    }
+<span class="ln">19</span>  }
+<span class="hl"><span class="ln">20</span>  <span class="kw">throw new</span> Error(<span class="str">'Failed after retries'</span>); <span class="cm">// causes SQS re-enqueue</span></span>
+<span class="ln">21</span> }
+        </div>
+        <div class="multiplier-grid">
+          <div class="mult-card"><div class="mult-label">Lambda invocations</div><div class="mult-val bad">4×</div><div class="mult-desc">original + 3 SQS redrives per message</div></div>
+          <div class="mult-card"><div class="mult-label">DynamoDB attempts</div><div class="mult-val bad">16×</div><div class="mult-desc">4 invocations × 4 attempts each</div></div>
+          <div class="mult-card"><div class="mult-label">Effective multiplier</div><div class="mult-val bad">16×</div><div class="mult-desc">on a 4-hour throttling event at scale</div></div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-muted)">Highlighted lines show the three bugs. The Lambda function throws on line 20 → SQS visibility timeout expires → message re-enqueued → Lambda re-invoked with all 4 attempts. This repeats until max receive count (if set) or indefinitely (if DLQ is missing).</p>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">See the fixes →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    pOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🌪️ Fix Patterns</div>
+        <h2>Four patterns that contain retry cost — click each</h2>
+        <div class="pattern-cards">
+          <div class="p-card" id="p-0" onclick="openP(0)">
+            <div class="p-head"><span class="ph-icon">⏱️</span><span class="ph-title">Exponential backoff with jitter</span><span class="ph-tag good">ESSENTIAL</span></div>
+            <div class="p-body">Replace the bare retry loop with: delay = Math.min(baseDelay × 2^attempt + Math.random() × 100, maxDelay). The <strong>jitter</strong> (random component) is critical — without it, all callers retry simultaneously after a failure, creating coordinated thundering herds that worsen the downstream service.<br><br>At scale: 1,000 Lambda functions with synchronised 1-second retries = 1,000 DynamoDB requests at t=1, t=2, t=3. With jitter: spread randomly across 2–3 seconds, reducing peak load by 60–80%. This both reduces the likelihood of continued throttling <em>and</em> reduces the cost of the retry burst.</div>
+          </div>
+          <div class="p-card" id="p-1" onclick="openP(1)">
+            <div class="p-head"><span class="ph-icon">🔍</span><span class="ph-title">Retryable vs. non-retryable error classification</span><span class="ph-tag good">ESSENTIAL</span></div>
+            <div class="p-body">Not all errors benefit from retrying. Before retrying, check the error type:<br><br>
+            <strong>Retryable:</strong> ProvisionedThroughputExceededException, ThrottlingException, ServiceUnavailableException, 429, 503, 504<br>
+            <strong>Not retryable:</strong> ValidationException, ResourceNotFoundException, ConditionalCheckFailedException, 400, 404, 422<br><br>
+            Retrying a 400 ValidationException is pure waste — the request will fail the same way every time. In a storm scenario, filtering non-retryable errors drops unnecessary Lambda invocations entirely. AWS SDKs have built-in retry logic for retryable errors — set maxAttempts in the SDK config rather than implementing your own loop.</div>
+          </div>
+          <div class="p-card" id="p-2" onclick="openP(2)">
+            <div class="p-head"><span class="ph-icon">📬</span><span class="ph-title">SQS dead letter queue + maxReceiveCount</span><span class="ph-tag bad">MISSING IN SCENARIO</span></div>
+            <div class="p-body">Without a DLQ and maxReceiveCount, a failing message loops forever. Configure:<br>
+            — <code>maxReceiveCount: 3</code> (or 5) on the source queue<br>
+            — A dead letter queue to capture unprocessable messages<br>
+            — A CloudWatch alarm on DLQ depth (ApproximateNumberOfMessagesVisible > 0)<br><br>
+            Cost impact: with maxReceiveCount=3, the maximum SQS redrives is 3. Without it, a message that never succeeds generates infinite Lambda invocations until manually purged. At $0.20/million Lambda requests + compute time, an uncapped DLQ-less queue is an open billing tap.<br><br>
+            Also: set SQS visibility timeout to 6× your Lambda timeout. If visibility timeout &lt; Lambda timeout, SQS re-enqueues while Lambda is still running, causing duplicate processing.</div>
+          </div>
+          <div class="p-card" id="p-3" onclick="openP(3)">
+            <div class="p-head"><span class="ph-icon">🔌</span><span class="ph-title">Circuit breaker pattern</span><span class="ph-tag good">ADVANCED</span></div>
+            <div class="p-body">When a downstream service (DynamoDB, RDS, external API) is in sustained failure, continuing to send requests wastes money and makes recovery harder. A circuit breaker:<br><br>
+            <strong>Closed state</strong>: normal operation, requests pass through<br>
+            <strong>Open state</strong>: after N failures in a window, stop sending requests for T seconds<br>
+            <strong>Half-open state</strong>: send one probe request; if it succeeds, close the circuit<br><br>
+            Cost value: during a 4-hour DynamoDB throttling event, an open circuit breaker drops Lambda invocations to near-zero for the duration. In the scenario, this would have reduced the $3,200 incident to &lt;$50. Libraries: AWS Lambda Powertools includes a circuit breaker implementation. Set the threshold to match your error budget.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 4 to continue</span>
+          <button class="btn btn-primary" id="p-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>Storm-proof!</h2>
+        <div class="results-score">170<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>Retry logic is one of the highest-leverage cost controls in serverless. A weekend incident that "shouldn't have cost anything" can hit $3K+ if retries are uncapped and DLQs are missing.</p>
+        <div class="xp-gained">🏆 +170 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Always classify errors before retrying. ValidationException retries are 100% waste. ThrottlingException retries with backoff are correct behavior.</li>
+          <li>Jitter is not optional at scale. Synchronised retries create thundering herds that worsen the original failure and generate a coordinated cost spike.</li>
+          <li>Every SQS queue that triggers Lambda must have: maxReceiveCount set, a DLQ configured, and a CloudWatch alarm on DLQ depth. No exceptions.</li>
+          <li>SQS visibility timeout must be ≥ 6× Lambda timeout. Otherwise SQS re-enqueues while Lambda is still running, creating duplicate executions and double billing.</li>
+          <li>Use AWS SDK built-in retry configuration (maxAttempts, retryMode: 'adaptive') before writing your own retry loops. The SDK handles retryable/non-retryable classification automatically.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="dev-module14.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

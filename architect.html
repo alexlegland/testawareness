@@ -11,89 +11,137 @@
 <body>
 
 <nav>
-  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <a class="nav-logo" href="index.html">
+    <span class="logo-icon">💸</span>
+    FinOps Academy
+  </a>
   <span class="nav-badge">Cloud Architect Track</span>
 </nav>
 
-<main style="max-width:780px;margin:0 auto;padding:40px 20px">
-  <div style="margin-bottom:40px">
-    <div style="display:inline-block;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:4px 14px;font-size:0.72rem;font-weight:700;color:var(--success);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:16px">Cloud Architect</div>
-    <h1 style="font-size:2rem;font-weight:900;margin-bottom:12px">Architecture decisions<br>have price tags.</h1>
-    <p style="color:var(--text-muted);font-size:1rem;max-width:540px;line-height:1.6">Every architectural choice — region strategy, compute type, data flow, availability tier — has a direct cost consequence. This track makes those price tags visible.</p>
+<main>
+
+  <div class="track-hero">
+    <a href="index.html" style="font-size:0.82rem;color:var(--text-muted);text-decoration:none;display:inline-flex;align-items:center;gap:6px;margin-bottom:20px;">
+      ← Back to role selection
+    </a>
+    <div class="track-badge" style="background:linear-gradient(135deg,rgba(34,197,94,0.15),rgba(108,71,255,0.1));border:1px solid rgba(34,197,94,0.3);color:var(--success)">🏗️ Cloud Architect Track</div>
+    <h1>Architecture decisions<br><span class="highlight">have price tags.</span></h1>
+    <p>8 modules on compute models, data transfer, resilience tiers, and purchasing strategy — for architects who want to make cost trade-offs deliberately. ~6 min each.</p>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <div class="module-list">
 
-    <a href="arch-module1.html" class="module-list-item">
+    <a class="module-item available" href="arch-module1.html">
       <div class="module-num">01</div>
-      <div class="module-info">
-        <div class="module-title">The Cost of Availability</div>
-        <div class="module-desc">Multi-AZ vs. multi-region vs. single-AZ — what each resilience tier actually costs. Toggle deployment patterns and see the multipliers.</div>
-        <div class="module-tags"><span>Multi-AZ</span><span>Multi-region</span><span>RDS</span><span>Resilience tradeoffs</span></div>
+      <div class="module-item-icon">🛡️</div>
+      <div class="module-item-body">
+        <div class="module-item-title">The Cost of Availability</div>
+        <div class="module-item-desc">Single-AZ, Multi-AZ, Multi-Region — toggle between deployment tiers and see the exact cost multipliers for each resilience level.</div>
       </div>
-      <div class="module-pts">120 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +120 XP</span>
+        <span class="module-item-duration">⏱ ~5 min</span>
+      </div>
     </a>
 
-    <a href="arch-module2.html" class="module-list-item">
+    <a class="module-item available" href="arch-module2.html">
       <div class="module-num">02</div>
-      <div class="module-info">
-        <div class="module-title">Data Transfer: The Invisible Bill</div>
-        <div class="module-desc">Annotate an architecture diagram to find where egress costs are hiding. NAT Gateway, cross-AZ traffic, inter-region replication — each has a price.</div>
-        <div class="module-tags"><span>Egress</span><span>NAT Gateway</span><span>Cross-AZ</span><span>CloudFront</span></div>
+      <div class="module-item-icon">🌐</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Data Transfer: The Invisible Bill</div>
+        <div class="module-item-desc">Annotate an architecture diagram to find where egress costs hide. NAT Gateway, cross-AZ traffic, inter-region replication — each has a price.</div>
       </div>
-      <div class="module-pts">160 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +160 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
     </a>
 
-    <a href="arch-module3.html" class="module-list-item">
+    <a class="module-item available" href="arch-module3.html">
       <div class="module-num">03</div>
-      <div class="module-info">
-        <div class="module-title">Instance Right-Sizing</div>
-        <div class="module-desc">Given CPU and memory utilisation metrics for 5 workloads, choose the right instance family. See how over-provisioning compounds at scale.</div>
-        <div class="module-tags"><span>EC2 families</span><span>Right-sizing</span><span>Utilisation</span><span>Cost per core</span></div>
+      <div class="module-item-icon">📦</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Instance Right-Sizing</div>
+        <div class="module-item-desc">Given real CloudWatch metrics for 5 workloads, pick the right instance family and size. See how over-provisioning compounds across a fleet.</div>
       </div>
-      <div class="module-pts">150 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +150 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
     </a>
 
-    <a href="arch-module4.html" class="module-list-item">
+    <a class="module-item available" href="arch-module4.html">
       <div class="module-num">04</div>
-      <div class="module-info">
-        <div class="module-title">Spot, On-Demand, Reserved — Pick Your Fighter</div>
-        <div class="module-desc">Classify 6 workloads into the right purchasing model. Understand interruption tolerance, discount tiers, and when each model breaks down.</div>
-        <div class="module-tags"><span>Spot</span><span>Savings Plans</span><span>Reserved Instances</span><span>On-demand</span></div>
+      <div class="module-item-icon">💰</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Spot, On-Demand, Reserved — Pick Your Fighter</div>
+        <div class="module-item-desc">Classify 6 workloads into the right purchasing model. Interruption tolerance, discount tiers, and when each model breaks down.</div>
       </div>
-      <div class="module-pts">140 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +140 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
     </a>
 
-    <a href="arch-module5.html" class="module-list-item">
+    <a class="module-item available" href="arch-module5.html">
       <div class="module-num">05</div>
-      <div class="module-info">
-        <div class="module-title">Serverless vs. Containers vs. VMs</div>
-        <div class="module-desc">Run three real workloads through a cost model: high-throughput API, batch processor, and event-driven pipeline. The winner depends on the numbers.</div>
-        <div class="module-tags"><span>Lambda</span><span>Fargate</span><span>EC2</span><span>Compute model</span></div>
+      <div class="module-item-icon">⚙️</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Serverless vs. Containers vs. VMs</div>
+        <div class="module-item-desc">Three real workloads, three compute models. The cheapest option changes depending on request rate, duration, and traffic pattern.</div>
       </div>
-      <div class="module-pts">160 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +160 XP</span>
+        <span class="module-item-duration">⏱ ~7 min</span>
+      </div>
     </a>
 
-    <a href="arch-module6.html" class="module-list-item">
+    <a class="module-item available" href="arch-module6.html">
       <div class="module-num">06</div>
-      <div class="module-info">
-        <div class="module-title">Architecture Review: Cost vs. Correctness</div>
-        <div class="module-desc">Review a real system design. Identify five architectural choices that are correct-but-expensive and propose cheaper alternatives without breaking requirements.</div>
-        <div class="module-tags"><span>Architecture review</span><span>Trade-offs</span><span>SLA</span><span>Cost optimisation</span></div>
+      <div class="module-item-icon">🔎</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Architecture Review: Cost vs. Correctness</div>
+        <div class="module-item-desc">8 production components. 5 have real cost problems. Flag the right ones — false alarms cost points. Correct skips count too.</div>
       </div>
-      <div class="module-pts">180 pts</div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +180 XP</span>
+        <span class="module-item-duration">⏱ ~7 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="arch-module7.html">
+      <div class="module-num">07</div>
+      <div class="module-item-icon">🗄️</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Database Selection by Cost</div>
+        <div class="module-item-desc">RDS, Aurora, DynamoDB, Redshift — same data, four cost models. Match four real workloads to their cost-optimal database and understand the break-even points.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +160 XP</span>
+        <span class="module-item-duration">⏱ ~7 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="arch-module8.html">
+      <div class="module-num">08</div>
+      <div class="module-item-icon">⚡</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Event-Driven Architecture Costs</div>
+        <div class="module-item-desc">SQS vs. SNS vs. EventBridge vs. Kinesis. At 500K events/second the wrong choice costs 10× more. Understand the pricing models and match workloads to the right service.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +150 XP</span>
+        <span class="module-item-duration">⏱ ~7 min</span>
+      </div>
     </a>
 
   </div>
 
-  <div style="margin-top:32px;padding:20px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:16px">
-    <div style="font-size:2rem">🏛️</div>
-    <div>
-      <div style="font-weight:700;margin-bottom:4px">Total: 910 points available</div>
-      <div style="font-size:0.82rem;color:var(--text-muted)">Modules cover compute, networking, storage, and purchasing strategy — with real AWS pricing facts throughout.</div>
-    </div>
-  </div>
 </main>
+
+<footer class="footer">
+  Built for dev, CTO &amp; DevOps teams who'd rather spend on features than wasted compute. 💸
+</footer>
 
 </body>
 </html>

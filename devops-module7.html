@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 7: Kubernetes Cost Allocation — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .yaml-block { background:#0d0d1c; border:1px solid var(--border); border-radius:10px; padding:13px 16px; font-family:'Courier New',monospace; font-size:0.78rem; line-height:1.9; margin:10px 0; overflow-x:auto; }
+    .y-key { color:#79b8ff; } .y-val { color:#f1b24a; } .y-cmt { color:#6a737d; font-style:italic; }
+    .y-bad { background:rgba(239,68,68,0.14); border-radius:3px; padding:0 3px; }
+    .y-ok  { background:rgba(34,197,94,0.1);  border-radius:3px; padding:0 3px; }
+
+    .concept-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+    @media(max-width:500px){ .concept-grid{ grid-template-columns:1fr; } }
+    .concept-card { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; cursor:pointer; transition:border-color 0.15s; }
+    .concept-card:hover:not(.open){ border-color:var(--primary); }
+    .concept-card.open{ border-color:rgba(108,71,255,0.4); cursor:default; }
+    .cc-title { font-weight:800; font-size:0.88rem; margin-bottom:4px; }
+    .cc-sub { font-size:0.72rem; color:var(--text-muted); margin-bottom:8px; }
+    .cc-hint { font-size:0.7rem; color:var(--primary); font-weight:600; }
+    .cc-body { display:none; font-size:0.79rem; line-height:1.65; color:var(--text-muted); border-top:1px solid var(--border); margin-top:10px; padding-top:10px; }
+    .concept-card.open .cc-body { display:block; }
+    .concept-card.open .cc-hint { display:none; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, conceptsOpened=0, CONCEPT_TOTAL=4, quizAnswered=false;
+
+function openConcept(id){
+  var el=document.getElementById('cc-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); conceptsOpened++;
+  if(conceptsOpened>=CONCEPT_TOTAL) document.getElementById('concept-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type scenario">☸️ Kubernetes Costs</div>
+        <h2>Kubernetes makes waste invisible — until you look for it</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">On EKS, you pay for the EC2 nodes running your cluster. Kubernetes schedules pods onto nodes based on resource <strong>requests</strong> — not actual usage. A pod requesting 4 CPU but using 0.1 CPU still blocks 4 CPU worth of node capacity. Multiply across hundreds of pods and the waste compounds.</p>
+        <div class="scenario-box">
+          <strong>Your cluster:</strong> 24 × m5.2xlarge nodes (8 vCPU, 32 GB RAM each)<br>
+          Cost: $0.384/hr × 24 × 720hr = <strong>$6,635/month</strong> + EKS cluster fee ($0.10/hr = $72/mo)<br><br>
+          kubectl top nodes shows: <strong>avg CPU utilisation 11%, avg memory 19%</strong><br><br>
+          That means ~$5,700/mo of the node cost is serving resource <em>requests</em> that aren't actually being used.
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Understand the levers →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    conceptsOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">☸️ Cost Levers</div>
+        <h2>Four levers that control Kubernetes cost — click each</h2>
+        <div class="yaml-block">
+<span class="y-cmt"># Typical pod spec — three problems</span>
+<span class="y-key">resources</span>:
+  <span class="y-key">requests</span>:
+    <span class="y-key">cpu</span>:    <span class="y-val y-bad">"2000m"</span>     <span class="y-cmt"># 2 vCPU requested — actual avg: 80m</span>
+    <span class="y-key">memory</span>: <span class="y-val y-bad">"4Gi"</span>       <span class="y-cmt"># 4 GB requested — actual avg: 400 MB</span>
+  <span class="y-key">limits</span>:
+    <span class="y-key">cpu</span>:    <span class="y-val">"4000m"</span>     <span class="y-cmt"># 2× request — prevents OOM kill</span>
+    <span class="y-key">memory</span>: <span class="y-val">"8Gi"</span>
+        </div>
+        <div class="concept-grid">
+          <div class="concept-card" id="cc-0" onclick="openConcept(0)">
+            <div class="cc-title">📦 Requests vs. Limits</div>
+            <div class="cc-sub">Scheduling cost vs. burst ceiling</div>
+            <div class="cc-hint">Click to explore →</div>
+            <div class="cc-body"><strong>Requests</strong> determine scheduling — how much of a node Kubernetes "reserves" for the pod. A pod with <code>cpu: 2000m</code> request blocks 2 vCPU on the node, even if it uses 80m. <strong>Limits</strong> are the ceiling — the pod is throttled (CPU) or killed (memory) if it exceeds them.<br><br>The cost trap: engineers set requests = limits "for safety." This maximally over-reserves nodes and minimises bin-packing efficiency. <strong>Fix:</strong> Set requests to p90 actual usage + 20% headroom. Set limits higher (e.g., 2× request). Use Vertical Pod Autoscaler (VPA) in recommendation mode to get data-driven request suggestions.</div>
+          </div>
+          <div class="concept-card" id="cc-1" onclick="openConcept(1)">
+            <div class="cc-title">📐 Bin-Packing Efficiency</div>
+            <div class="cc-sub">How many pods fit per node</div>
+            <div class="cc-hint">Click to explore →</div>
+            <div class="cc-body">If pods request 2 vCPU each and your nodes have 8 vCPU, you fit 4 pods per node (ignoring memory). If you right-size requests to 200m, you fit 40 pods per node — 10× better utilisation for the same node cost.<br><br>At 11% actual CPU utilisation with 2 vCPU requests: each pod "uses" 2 vCPU of node capacity but consumes 80m. Right-sizing to 200m requests would allow 5× more pods per node, potentially reducing the cluster from 24 nodes to 5–6 nodes. Saving: ~$4,800/mo.</div>
+          </div>
+          <div class="concept-card" id="cc-2" onclick="openConcept(2)">
+            <div class="cc-title">📏 Namespace Resource Quotas</div>
+            <div class="cc-sub">Chargeback at the cluster level</div>
+            <div class="cc-hint">Click to explore →</div>
+            <div class="cc-body">Without namespace quotas, any team can deploy any number of pods with any resource requests — and there's no accountability for cluster cost. Namespace ResourceQuotas define the total CPU/memory that a namespace can request.<br><br>Combined with per-namespace cost attribution (tools like Kubecost or OpenCost), this enables showback/chargeback for Kubernetes: each team sees and is accountable for their share of node cost. This is the Kubernetes equivalent of cloud cost tagging.</div>
+          </div>
+          <div class="concept-card" id="cc-3" onclick="openConcept(3)">
+            <div class="cc-title">⚙️ Cluster Autoscaler vs. Karpenter</div>
+            <div class="cc-sub">How nodes scale affects cost</div>
+            <div class="cc-hint">Click to explore →</div>
+            <div class="cc-body"><strong>Cluster Autoscaler</strong> (CA) adds/removes nodes in node groups based on pending pods. It works but is conservative: it scales in slowly (typically 10-minute cooldown) and picks node types from predefined groups.<br><br><strong>Karpenter</strong> (AWS-native, open source) provisions exactly the right instance type for each pending pod — it can pick Spot, choose the best price/size combination, and consolidate underutilised nodes aggressively. In practice, Karpenter-managed clusters often run 20–40% cheaper than CA-managed clusters, primarily through better Spot utilisation and faster scale-in.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 to continue</span>
+          <button class="btn btn-primary" id="concept-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 150 pts</div>
+        <h2>A team wants to right-size pod requests using VPA recommendations. Platform says: "VPA and HPA can't run on the same deployment." Is this true, and does it matter?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: True — you must choose one. Use HPA for stateless services and VPA for stateful.</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: False — VPA and HPA can be combined freely with no conflicts.</button>
+          <button class="q-opt" onclick="answerQ(2,true,150,2)">C: Partially true — VPA in Auto mode conflicts with HPA on CPU/memory metrics, but VPA in Recommendation-only mode is safe and gives you the right-sizing data without conflicting with HPA.</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: True — use KEDA instead of both for cost-optimal scaling.</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>VPA Recommendation mode is the safe pattern.</strong> VPA in <code>Auto</code> mode restarts pods to resize them — this conflicts with HPA which is simultaneously trying to add/remove replicas based on CPU/memory, creating a scaling loop. VPA in <code>Off</code> or <code>Initial</code> mode (recommendation-only) simply reports what requests <em>should</em> be set to, based on historical usage. You then manually or via CI update the requests. This gives you right-sizing intelligence without the HPA conflict. Run VPA in recommendation mode for 2–4 weeks, then apply the suggestions in a planned change.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=120?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=120?'K8s cost expert!':score>=60?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/150</span></div>
+        <p>Kubernetes clusters commonly run at 10–15% actual utilisation while paying for 100% of node capacity — because requests are set by instinct, not measurement.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Resource <strong>requests</strong> determine scheduling cost — they reserve node capacity. Actual usage doesn't matter for billing; reserved capacity does.</li>
+          <li>Right-sizing requests from p90 actual usage + 20% headroom dramatically improves bin-packing. Going from 2 vCPU requests to 200m on a lightly-loaded service can enable 10× more pods per node.</li>
+          <li>Use VPA in <strong>Recommendation mode</strong> to get data-driven request suggestions without conflicting with HPA. Apply suggestions in a planned rollout.</li>
+          <li>Namespace ResourceQuotas enable cost accountability. Without them, there's no mechanism to hold teams accountable for cluster spend.</li>
+          <li>Karpenter outperforms Cluster Autoscaler for cost in most cases: faster scale-in, better Spot utilisation, instance-type flexibility. Worth evaluating for clusters over ~$2K/month.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Back to track →</a>
+          <a href="devops-module8.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

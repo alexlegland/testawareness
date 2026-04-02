@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 5: The Database Tax — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .query-block {
+      background: #0d0d1c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      margin: 10px 0;
+      overflow-x: auto;
+    }
+    .q-kw   { color: #7c9ef8; font-weight: 700; }
+    .q-str  { color: #f1b24a; }
+    .q-cmt  { color: #6a737d; font-style: italic; }
+    .q-num  { color: #a5d6ff; }
+    .q-bad  { background: rgba(239,68,68,0.12); border-radius: 3px; padding: 0 3px; }
+    .q-ok   { background: rgba(34,197,94,0.1);  border-radius: 3px; padding: 0 3px; }
+
+    .metric-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    @media(max-width:480px){ .metric-pair{ grid-template-columns:1fr; } }
+    .metric-before { background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px; padding: 12px 14px; }
+    .metric-after  { background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.2); border-radius: 10px; padding: 12px 14px; }
+    .metric-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; color: var(--text-muted); }
+    .metric-val   { font-size: 1.3rem; font-weight: 900; line-height: 1; }
+    .metric-sub   { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+
+    .pattern-cards { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+    .pattern-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; }
+    .pattern-card:hover:not(.open) { border-color: var(--primary); }
+    .pattern-card.open { cursor: default; border-color: rgba(108,71,255,0.3); }
+    .pc-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; gap: 12px; }
+    .pc-title  { font-weight: 700; font-size: 0.88rem; flex: 1; }
+    .pc-impact { font-weight: 800; font-size: 0.85rem; }
+    .pc-hint   { font-size: 0.7rem; color: var(--primary); font-weight: 600; }
+    .pc-body   { display: none; padding: 0 16px 14px; font-size: 0.8rem; line-height: 1.65; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 12px; }
+    .pattern-card.open .pc-body { display: block; }
+    .pattern-card.open .pc-hint { display: none; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Module 5 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var patternsOpened = 0;
+var PATTERN_TOTAL = 4;
+var quizAnswered = false;
+
+function openPattern(id) {
+  var card = document.getElementById('pat-' + id);
+  if (!card || card.classList.contains('open')) return;
+  card.classList.add('open');
+  patternsOpened++;
+  if (patternsOpened >= PATTERN_TOTAL) document.getElementById('pattern-next').disabled = false;
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🗃️ Database Costs</div>
+        <h2>The RDS bill doubled. Engineering said nothing changed.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">RDS CPU went from 18% to 74% average. No schema changes, no new features shipped — or so the team thought. One engineer added a new API endpoint that lists user activity. It went live 11 days ago.</p>
+
+        <div class="scenario-box">
+          <strong>The endpoint:</strong> <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px">GET /users/:id/activity</code>
+          — loads a user's recent activity feed, shown on their dashboard.
+          <br><br>
+          At 800 active users/hour, this endpoint is called ~4,800 times/hour. The RDS instance is a <strong>db.m5.xlarge</strong> at <strong>$0.230/hr</strong>. Before the endpoint launched, you were planning to downsize to a db.m5.large ($0.115/hr). That plan is now on hold.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Inspect the code →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    patternsOpened = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Code Patterns</div>
+        <h2>Four patterns that silently tax the database</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">The endpoint looks innocent. Click each pattern to see what it's doing to RDS.</p>
+
+        <div class="query-block">
+<span class="q-cmt">// GET /users/:id/activity — loads activity feed</span>
+<span class="q-kw">async function</span> getActivityFeed(userId) {
+  <span class="q-cmt">// Load user</span>
+  <span class="q-kw">const</span> user = <span class="q-kw">await</span> db.query(
+    <span class="q-str"><span class="q-bad">'SELECT * FROM users WHERE id = ?'</span></span>, [userId]
+  );
+  <span class="q-cmt">// Load each activity item separately</span>
+  <span class="q-kw">const</span> activities = <span class="q-kw">await</span> db.query(
+    <span class="q-str">'SELECT id FROM activity WHERE user_id = ? ORDER BY created_at DESC'</span>,
+    [userId]
+  );
+  <span class="q-kw">const</span> result = [];
+  <span class="q-kw">for</span> (<span class="q-kw">const</span> act <span class="q-kw">of</span> activities) {       <span class="q-cmt"><span class="q-bad">// N+1 loop</span></span>
+    <span class="q-kw">const</span> detail = <span class="q-kw">await</span> db.query(
+      <span class="q-str"><span class="q-bad">'SELECT * FROM activity_details WHERE activity_id = ?'</span></span>,
+      [act.id]
+    );
+    result.push(detail);
+  }
+  <span class="q-kw">return</span> result;  <span class="q-cmt"><span class="q-bad">// no LIMIT, no cache</span></span>
+}
+        </div>
+
+        <div class="pattern-cards">
+          <div class="pattern-card" id="pat-0" onclick="openPattern(0)">
+            <div class="pc-header">
+              <div class="pc-title">🔴 SELECT * instead of named columns</div>
+              <div class="pc-impact" style="color:var(--warning)">+CPU, +I/O</div>
+              <div class="pc-hint">Click →</div>
+            </div>
+            <div class="pc-body">
+              <code>SELECT * FROM users</code> returns every column — including large text fields, JSON blobs, and columns the endpoint never uses. RDS has to read and transfer all of it. If the <code>users</code> table has a <code>preferences</code> JSONB column with 20 KB of data per user, that's 20 KB loaded and discarded on every call.<br><br>
+              <strong>Fix:</strong> <code>SELECT id, name, email FROM users WHERE id = ?</code> — name only what you need. For this endpoint, you probably only need the user's display name, not their full profile.
+            </div>
+          </div>
+
+          <div class="pattern-card" id="pat-1" onclick="openPattern(1)">
+            <div class="pc-header">
+              <div class="pc-title">🔴 N+1 query loop</div>
+              <div class="pc-impact" style="color:var(--danger)">N × round-trips</div>
+              <div class="pc-hint">Click →</div>
+            </div>
+            <div class="pc-body">
+              The code loads a list of activity IDs, then fires one query per ID inside a loop. If a user has 50 activity items, that's 52 total queries (1 user + 1 activity list + 50 detail queries) per API call. At 4,800 calls/hour: <strong>249,600 queries/hour</strong>.<br><br>
+              <strong>Fix:</strong> Use a JOIN or an IN clause to load everything in one or two queries:<br>
+              <code style="font-size:0.75rem">SELECT a.*, d.* FROM activity a JOIN activity_details d ON d.activity_id = a.id WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 20</code>
+            </div>
+          </div>
+
+          <div class="pattern-card" id="pat-2" onclick="openPattern(2)">
+            <div class="pc-header">
+              <div class="pc-title">🔴 No LIMIT on result set</div>
+              <div class="pc-impact" style="color:var(--danger)">Unbounded scans</div>
+              <div class="pc-hint">Click →</div>
+            </div>
+            <div class="pc-body">
+              The activity query has no LIMIT — it returns all activity for the user, ever. A power user with 3 years of activity gets thousands of rows loaded and then truncated by the UI anyway. Each row causes more I/O, more memory usage, and more data transferred to the app server.<br><br>
+              <strong>Fix:</strong> Always paginate. <code>LIMIT 20 OFFSET ?</code> for cursor-based pagination. The UI only shows 20 items — only load 20 items.
+            </div>
+          </div>
+
+          <div class="pattern-card" id="pat-3" onclick="openPattern(3)">
+            <div class="pc-header">
+              <div class="pc-title">🟡 No caching layer</div>
+              <div class="pc-impact" style="color:var(--warning)">4,800 DB hits/hr</div>
+              <div class="pc-hint">Click →</div>
+            </div>
+            <div class="pc-body">
+              Activity feeds are read far more often than they change. Every page load hits the database directly. An ElastiCache Redis layer (r6g.large: ~$0.114/hr = $83/mo) could cache activity feeds per user with a short TTL (e.g., 60 seconds). Cache hit rate of 80%+ would reduce DB load by 4× and likely allow the RDS downsize to proceed.<br><br>
+              <strong>Tradeoff:</strong> Caching adds infrastructure and invalidation complexity. Fix the N+1 and LIMIT first — those are free fixes that should come before adding a cache.
+            </div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 patterns to continue</span>
+          <button class="btn btn-primary" id="pattern-next" onclick="nextStep()" disabled>See the impact →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 150 pts</div>
+        <h2>After fixing the N+1 and adding LIMIT 20, the endpoint now runs 2 queries per call instead of 52. What's the estimated reduction in RDS query volume per hour?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Current: ~4,800 calls/hour × 52 queries = 249,600 queries/hr</p>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: About 10% reduction — the N+1 isn't that significant at this scale</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: About 50% reduction — cutting from 52 to 2 queries halves the load</button>
+          <button class="q-opt" onclick="answerQ(2,true,150,2)">C: About 96% reduction — 4,800 × 2 = 9,600 queries/hr vs. 249,600</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: It depends on index coverage — the query count doesn't directly predict CPU</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>96% reduction.</strong> 4,800 × 2 = 9,600 queries/hr vs. 249,600. That's a 26× reduction in query volume. RDS CPU should drop from ~74% back toward the original 18%. This means the db.m5.large downsize (saving $0.115/hr = $84/mo) becomes viable again — and the fix cost nothing except developer time. Option D has a point (query complexity matters), but the N+1 is so dominant here that query count is the primary driver.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 150;
+    var badge = score >= 120 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 120 ? 'Query-cost aware!' : score >= 60 ? 'Good instincts!' : 'Worth revisiting!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Application code changes can double a database bill without any infrastructure change. N+1 patterns are the most common culprit.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>N+1 queries multiply linearly with result set size. An endpoint loading N items and firing one query per item will generate N+1 queries per call — and N+1 times the RDS CPU and I/O.</li>
+            <li><code>SELECT *</code> loads every column including large fields (JSON, text, blobs) the code never uses. Always name the columns you need.</li>
+            <li>No LIMIT on queries that can return hundreds of rows causes unbounded scans. Always paginate — if the UI shows 20, load 20.</li>
+            <li>Fix code before adding infrastructure. N+1 + LIMIT fixes are free and often restore enough headroom to defer or cancel a planned instance upgrade.</li>
+            <li>Cache reads, not writes. Activity feeds are read-heavy — caching with a short TTL (60s) can reduce DB load by 4–10×. But fix the query patterns first.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="dev-module10.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

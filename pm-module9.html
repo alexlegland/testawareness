@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 9: Cost of Technical Debt — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .debt-item { background:var(--surface2); border:2px solid var(--border); border-radius:14px; padding:14px 16px; margin:10px 0; cursor:pointer; transition:border-color 0.15s; }
+    .debt-item:hover:not(.open){ border-color:var(--accent); }
+    .debt-item.open{ border-color:rgba(255,107,53,0.4); cursor:default; }
+    .di-head { display:flex; align-items:center; gap:12px; }
+    .di-icon { font-size:1.3rem; flex-shrink:0; }
+    .di-title { flex:1; font-weight:700; font-size:0.88rem; }
+    .di-cost  { font-weight:800; color:var(--danger); }
+    .di-hint  { font-size:0.7rem; color:var(--primary); font-weight:600; white-space:nowrap; }
+    .di-body  { display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:0.8rem; line-height:1.65; color:var(--text-muted); }
+    .debt-item.open .di-body { display:block; }
+    .debt-item.open .di-hint { display:none; }
+
+    .priority-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+    @media(max-width:480px){ .priority-grid{ grid-template-columns:1fr; } }
+    .prio-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:14px 16px; cursor:pointer; transition:all 0.15s; }
+    .prio-card:hover:not(.locked){ border-color:var(--primary); transform:translateY(-2px); }
+    .prio-card.locked{ cursor:default; }
+    .prio-card.chosen{ border-color:var(--primary); background:rgba(108,71,255,0.08); }
+    .prio-card.not-chosen{ opacity:0.5; }
+    .pc-title { font-weight:800; font-size:0.9rem; margin-bottom:4px; }
+    .pc-why   { font-size:0.78rem; color:var(--text-muted); line-height:1.5; margin-bottom:8px; }
+    .pc-reveal { display:none; margin-top:8px; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.77rem; line-height:1.6; color:var(--text-muted); }
+    .prio-card.chosen .pc-reveal, .prio-card.not-chosen .pc-reveal { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Product Manager · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, debtOpened=0, DEBT_TOTAL=4, prioChosen=false, quizAnswered=false;
+
+function openDebt(id){
+  var el=document.getElementById('debt-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); debtOpened++;
+  if(debtOpened>=DEBT_TOTAL) document.getElementById('debt-next').disabled=false;
+}
+function choosePrio(idx){
+  if(prioChosen)return; prioChosen=true;
+  var correct=idx===1; // ROI-based is best
+  if(correct) score+=160;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.prio-card').forEach(function(c,i){
+    c.classList.add('locked');
+    if(i===idx) c.classList.add('chosen');
+    else c.classList.add('not-chosen');
+  });
+  document.getElementById('prio-fb').style.display='block';
+  document.getElementById('prio-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🏚️ Technical Debt</div>
+        <h2>Technical debt has an invoice. It arrives every month.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">PMs often treat technical debt refactoring as "engineering time with no product output." But infrastructure technical debt generates a recurring cloud bill that compounds as traffic grows. Quantifying that cost turns a vague engineering request into a business case with a payback period.</p>
+        <div class="scenario-box">
+          <strong>Your product:</strong> A data processing platform, 4 years old. 120,000 monthly active users. Cloud spend: $280,000/month and growing 25% YoY. Engineering has flagged four architectural decisions from the early days that are now expensive. They're asking for a quarter of refactoring work. You need to decide what to prioritise.
+        </div>
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Review the debt items →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    debtOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🏚️ Debt Inventory</div>
+        <h2>Four legacy architectural decisions — click each to see the monthly cost</h2>
+        <div>
+          <div class="debt-item" id="debt-0" onclick="openDebt(0)">
+            <div class="di-head"><span class="di-icon">🗄️</span><span class="di-title">Monolithic RDS instance — everything in one db.r5.4xlarge</span><span class="di-cost">$1,700/mo excess</span><span class="di-hint">Click →</span></div>
+            <div class="di-body">Started as one database, never split. Product, analytics, sessions, and audit logs all share a db.r5.4xlarge ($3,024/hr → $2,177/mo + Multi-AZ). Analytics queries cause CPU spikes that affect product latency. The fix: move analytics to a Read Replica or dedicated Redshift cluster (~$480/mo). Move sessions to ElastiCache (~$120/mo). Estimated saving after refactor: ~$1,700/mo. Engineering estimate: 6 weeks (2 engineers). Payback: ~6 months.<br><br>Additionally blocking: can't right-size the main DB instance until analytics load is separated.</div>
+          </div>
+          <div class="debt-item" id="debt-1" onclick="openDebt(1)">
+            <div class="di-head"><span class="di-icon">📤</span><span class="di-title">Synchronous API calls for every background job</span><span class="di-cost">$4,200/mo excess</span><span class="di-hint">Click →</span></div>
+            <div class="di-body">Background jobs (report generation, email sends, data exports) are triggered via synchronous API calls — keeping EC2 instances alive until the job completes, sometimes 4–8 minutes. This blocks the instance from handling other requests and forces horizontal scaling to absorb it. Moving to an async queue (SQS + Lambda or dedicated worker fleet on Spot) would reduce EC2 minimum capacity by ~30%. Saving: $4,200/mo. Engineering: 4 weeks. Payback: ~3 weeks.<br><br>Best ROI item in the list. The Spot worker fleet would cost ~$400/mo to replace $4,600/mo of on-demand EC2 time.</div>
+          </div>
+          <div class="debt-item" id="debt-2" onclick="openDebt(2)">
+            <div class="di-head"><span class="di-icon">🪣</span><span class="di-title">S3 — 340 TB in Standard tier, no lifecycle policy</span><span class="di-cost">$5,600/mo excess</span><span class="di-hint">Click →</span></div>
+            <div class="di-body">340 TB × $0.023/GB = $7,820/mo. Access pattern analysis: 91% of objects not accessed in over 90 days. A lifecycle policy transitioning to S3-IA after 30 days ($0.0125/GB) and Glacier Instant after 90 days ($0.004/GB) would reduce costs dramatically. Conservative estimate: $5,600/mo saving. Engineering work: 1 week (mostly configuration, with testing). Payback: &lt;1 week.<br><br>Fastest win. No architecture change required — just S3 lifecycle configuration. The only risk: latency for infrequently accessed objects increases (Glacier Instant: &lt;1 second retrieval, but slightly higher than Standard). Test that downstream systems tolerate it.</div>
+          </div>
+          <div class="debt-item" id="debt-3" onclick="openDebt(3)">
+            <div class="di-head"><span class="di-icon">📡</span><span class="di-title">All services sending logs to CloudWatch at DEBUG level</span><span class="di-cost">$3,100/mo excess</span><span class="di-hint">Click →</span></div>
+            <div class="di-body">12 services, all logging at DEBUG in production. At $0.50/GB ingestion: estimated 6,200 GB/month = $3,100/mo. Switching to INFO level would reduce log volume by ~70% (most DEBUG volume is request/response bodies and stack trace frames). Adding log sampling for high-frequency endpoints reduces the rest. Estimated saving: $2,200–$2,800/mo. Engineering: 1 week (config changes + verification). Payback: &lt;1 week.<br><br>Also affects CloudWatch Logs Insights query costs — less data stored means cheaper log analysis.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 to continue</span>
+          <button class="btn btn-primary" id="debt-next" onclick="nextStep()" disabled>Prioritise →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    prioChosen=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type scenario">🏚️ Prioritisation — 160 pts</div>
+        <h2>Engineering has 1 quarter. How do you prioritise?</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Total potential saving: ~$14,600/mo. Engineering capacity: ~10 eng-weeks this quarter. Choose the prioritisation framework.</p>
+        <div class="priority-grid">
+          <div class="prio-card" onclick="choosePrio(0)">
+            <div class="pc-title">🔥 Biggest saving first</div>
+            <div class="pc-why">S3 lifecycle ($5,600) → async jobs ($4,200) → logging ($3,100) → DB split ($1,700). Pure saving amount.</div>
+            <div class="pc-reveal">Reasonable but misses payback period. S3 and logging are 1-week fixes each. The async job refactor has the best saving-per-engineering-week ratio. Doing the DB split (6 weeks, $1,700/mo saving) last is correct — but the ordering here doesn't account for opportunity cost of engineering time.</div>
+          </div>
+          <div class="prio-card" onclick="choosePrio(1)">
+            <div class="pc-title">📊 Best ROI first (saving ÷ eng weeks)</div>
+            <div class="pc-why">S3 lifecycle: $5,600 saving / 1 week = $5,600/wk. Logging: $2,500 / 1 wk. Async jobs: $4,200 / 4 wks = $1,050/wk. DB split: $1,700 / 6 wks = $283/wk.</div>
+            <div class="pc-reveal">✅ Best framework. S3 lifecycle and logging fixes take 2 weeks and save ~$8,100/mo — paying back in days. Use the remaining 8 weeks on async job refactoring ($4,200/mo). Skip the DB split this quarter: lowest ROI and highest risk. Queue it for next quarter when the quick wins have already been captured. This maximises saving per engineering week spent — the right PM metric for technical debt prioritisation.</div>
+          </div>
+          <div class="prio-card" onclick="choosePrio(2)">
+            <div class="pc-title">⚡ Fastest fix first</div>
+            <div class="pc-why">S3 lifecycle (1 wk) → logging (1 wk) → then whatever fits. Minimise time to first saving.</div>
+            <div class="pc-reveal">Close to optimal but doesn't account for ROI of the longer items. If you do S3 + logging in 2 weeks, you still have 8 weeks. Choosing "whatever fits" without ROI prioritisation could mean doing the DB split (low ROI) instead of the async refactor (high ROI). Fastest-first is a good tiebreaker within similar-sized items, but ROI should drive the order.</div>
+          </div>
+          <div class="prio-card" onclick="choosePrio(3)">
+            <div class="pc-title">🏗️ Most strategic first</div>
+            <div class="pc-why">DB split first — it's the foundational change that unblocks right-sizing and enables future scale.</div>
+            <div class="pc-reveal">Architecturally correct but financially wrong for this quarter. The DB split takes 6 weeks, saves $1,700/mo, and has the worst payback period. In the meantime, S3 and logging fixes that could have saved $8,100/mo from week 3 onwards are deferred. Strategy matters, but when technical debt has a direct cost impact, financial ROI should drive near-term sequencing. Do the quick wins first; queue the architectural refactors for when their strategic value justifies the investment period.</div>
+          </div>
+        </div>
+        <div id="prio-fb" style="display:none" class="tip-card">
+          The key insight: technical debt prioritisation should include <strong>saving per engineering week</strong> as a first-class metric alongside architectural impact and risk. Two 1-week fixes that save $8,100/month have a stronger near-term case than one 6-week refactor saving $1,700/month.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="prio-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=130?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=130?'Tech debt strategist!':score>=60?'Good instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>Technical debt has a recurring monthly invoice. Quantifying it turns engineering requests into business cases with payback periods.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Calculate <strong>saving ÷ engineering weeks</strong> for each debt item. A 1-week fix saving $5,600/mo has a stronger ROI than a 6-week fix saving $1,700/mo, even if the latter is more architecturally satisfying.</li>
+          <li>Configuration-level fixes (S3 lifecycle policies, log level changes) often have the best ROI — days of engineering time, months of recurring savings. Do these first.</li>
+          <li>Quick wins buy credibility for bigger refactors. Show the CFO a month-1 saving on the bill, and the quarter-2 architectural investment is an easier conversation.</li>
+          <li>Payback period = engineering cost / monthly saving. At $150/hr fully loaded, 1 eng-week = $6,000. An $8,000/mo saving has a 1-week payback. Present this to leadership, not just "we need time for tech debt."</li>
+          <li>Refactoring complexity and financial impact are independent axes. The most expensive-to-fix item is rarely the most expensive to leave alone.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 8: DynamoDB Cost Traps — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .trap-card { background:var(--surface2); border:2px solid var(--border); border-radius:14px; overflow:hidden; margin:10px 0; cursor:pointer; transition:border-color 0.15s; }
+    .trap-card:hover:not(.open){ border-color:var(--accent); }
+    .trap-card.open{ border-color:rgba(255,107,53,0.4); cursor:default; }
+    .tc-head { display:flex; align-items:center; gap:12px; padding:13px 16px; }
+    .tc-icon { font-size:1.3rem; flex-shrink:0; }
+    .tc-title { flex:1; font-weight:700; font-size:0.88rem; }
+    .tc-cost { font-weight:800; color:var(--danger); font-size:0.85rem; }
+    .tc-hint { font-size:0.7rem; color:var(--primary); font-weight:600; white-space:nowrap; }
+    .tc-body { display:none; padding:0 16px 14px; border-top:1px solid var(--border); padding-top:12px; font-size:0.8rem; line-height:1.65; color:var(--text-muted); }
+    .trap-card.open .tc-body { display:block; }
+    .trap-card.open .tc-hint { display:none; }
+
+    .ddb-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin:10px 0; }
+    .ddb-table th { background:#17172a; padding:8px 13px; text-align:left; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .ddb-table td { padding:9px 13px; border-bottom:1px solid var(--border); }
+    .ddb-table tr:last-child td { border-bottom:none; }
+
+    .mode-toggle { display:flex; gap:8px; margin:12px 0; }
+    .mt-btn { flex:1; padding:10px; border-radius:10px; border:2px solid var(--border); background:var(--surface2); cursor:pointer; font-size:0.82rem; font-weight:700; transition:all 0.15s; text-align:center; }
+    .mt-btn.active { border-color:var(--primary); background:rgba(108,71,255,0.1); color:var(--primary); }
+    .mode-panel { display:none; } .mode-panel.active { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, trapsOpened=0, TRAP_TOTAL=4, quizAnswered=false;
+
+function openTrap(id){
+  var el=document.getElementById('trap-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); trapsOpened++;
+  if(trapsOpened>=TRAP_TOTAL) document.getElementById('trap-next').disabled=false;
+}
+function switchMode(m){
+  document.querySelectorAll('.mt-btn').forEach(function(b){ b.classList.toggle('active',b.dataset.mode===m); });
+  document.querySelectorAll('.mode-panel').forEach(function(p){ p.classList.toggle('active',p.dataset.panel===m); });
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🗃️ DynamoDB Pricing</div>
+        <h2>DynamoDB: pay per request or per hour — the wrong choice is expensive</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">DynamoDB offers two billing modes. On-Demand charges per request. Provisioned charges per hour for capacity you reserve. The pricing model interacts with your access patterns in ways that aren't obvious — and the common mistakes each cost thousands per month.</p>
+        <div class="scenario-box">
+          <strong>DynamoDB pricing (us-east-1):</strong><br>
+          <strong>On-Demand:</strong> $1.25 per million Write Request Units (WRU) · $0.25 per million Read Request Units (RRU)<br>
+          <strong>Provisioned:</strong> $0.00065/WCU/hr · $0.00013/RCU/hr (+ Reserved Capacity: up to 77% off for 1-yr commit)<br>
+          <strong>Storage:</strong> $0.25/GB/month (both modes)<br>
+          <strong>GSI:</strong> Billed separately — each GSI has its own read/write capacity (or request units in on-demand mode)<br><br>
+          One Write Request Unit = up to 1 KB item write. One Read Request Unit = up to 4 KB eventually-consistent read (2 KB for strongly-consistent).
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the traps →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    trapsOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🗃️ Cost Traps</div>
+        <h2>Four DynamoDB patterns that silently inflate the bill</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Click each to understand the cost and the fix.</p>
+        <div>
+          <div class="trap-card" id="trap-0" onclick="openTrap(0)">
+            <div class="tc-head"><span class="tc-icon">🔍</span><span class="tc-title">Scan instead of Query</span><span class="tc-cost">reads entire table</span><span class="tc-hint">Click →</span></div>
+            <div class="tc-body">A <code>Scan</code> reads every item in the table (or every item in a partition) and filters client-side. Each item read consumes RCUs regardless of whether it matches your filter. A 10 GB table with 10M items: one Scan = 10M RCUs consumed = 10M/4KB = 2.5M RCUs = $0.625 per scan operation on-demand. Run it hourly: $450/month from a single misplaced operation.<br><br><strong>Fix:</strong> Use <code>Query</code> with a partition key. Query reads only items that match the key, consuming RCUs only for matching items. Requires designing your data model around your access patterns — DynamoDB's core design principle.</div>
+          </div>
+          <div class="trap-card" id="trap-1" onclick="openTrap(1)">
+            <div class="tc-head"><span class="tc-icon">🔑</span><span class="tc-title">Hot partition key</span><span class="tc-cost">throttling + wasted capacity</span><span class="tc-hint">Click →</span></div>
+            <div class="tc-body">DynamoDB distributes data across partitions by key. Provisioned capacity is distributed evenly across partitions. If 80% of your traffic goes to one partition key (e.g., <code>tenant_id="enterprise_customer_1"</code> for a large customer), that partition gets throttled even if the rest of the table is idle — because the partition's share of total capacity is exhausted.<br><br><strong>Consequences:</strong> Throttling errors, retries, latency spikes. Teams "fix" it by over-provisioning the entire table, paying for idle capacity on all other partitions.<br><br><strong>Fix:</strong> Use a composite key that distributes writes (e.g., <code>user_id + random_suffix</code> for write-heavy tables). For read-hot items, use DAX (DynamoDB Accelerator) to cache them and reduce partition pressure.</div>
+          </div>
+          <div class="trap-card" id="trap-2" onclick="openTrap(2)">
+            <div class="tc-head"><span class="tc-icon">📋</span><span class="tc-title">GSI on every attribute "for flexibility"</span><span class="tc-cost">2× to 5× the write cost</span><span class="tc-hint">Click →</span></div>
+            <div class="tc-body">Each Global Secondary Index replicates data and consumes separate write capacity. When you write an item, DynamoDB also writes to every GSI that indexes that item. A table with 5 GSIs that each index all items: one item write costs 6 WCUs (1 base table + 5 GSIs).<br><br>At 10M writes/day on-demand: $1.25/M × 10M × 6 = $75/day vs. $12.50/day with no GSIs. $62.50/day extra = $1,875/month.<br><br><strong>Fix:</strong> Design GSIs for specific, known access patterns — not "we might need this." A sparse GSI (only indexes items that have a particular attribute) is much cheaper than a full-table GSI. Delete GSIs that are never queried.</div>
+          </div>
+          <div class="trap-card" id="trap-3" onclick="openTrap(3)">
+            <div class="tc-head"><span class="tc-icon">📊</span><span class="tc-title">On-Demand mode for steady high-volume traffic</span><span class="tc-cost">up to 6× more expensive</span><span class="tc-hint">Click →</span></div>
+            <div class="tc-body">On-Demand is priced for unpredictable, bursty traffic. For steady, predictable traffic it's significantly more expensive than Provisioned + Reserved Capacity.<br><br><strong>Example — 10M writes/day, 50M reads/day:</strong><br>On-Demand: (10M × $1.25/M) + (50M × $0.25/M) = $12.50 + $12.50 = $25/day = $750/month<br>Provisioned (116 WCU, 579 RCU): ~$2.50/day = $75/month<br>Provisioned + Reserved (1yr): ~$1.40/day = $42/month<br><br>The breakeven is at moderate, consistent traffic levels. On-Demand makes sense for new tables (unknown traffic), dev/test, or genuinely spiky workloads where the burst cost is less than over-provisioned idle capacity.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 traps to continue</span>
+          <button class="btn btn-primary" id="trap-next" onclick="nextStep()" disabled>Compare modes →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 160 pts</div>
+        <h2>A table has 2M writes/day and 20M reads/day — stable for 8 months. It's on On-Demand. Someone proposes switching to Provisioned + 1-year Reserved Capacity. The team pushes back: "What if traffic spikes and we get throttled?" What's the right response?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,3)">A: Stay on On-Demand — throttling risk is never worth the cost saving</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,3)">B: Switch fully to Reserved — the savings are too big to ignore</button>
+          <button class="q-opt" onclick="answerQ(2,false,0,3)">C: Switch to Provisioned but not Reserved — keep the flexibility</button>
+          <button class="q-opt" onclick="answerQ(3,true,160,3)">D: Provision for the p90 baseline with Auto Scaling enabled. Reserve that baseline. Spikes above p90 are handled by Auto Scaling — provisioned capacity scales up before throttling occurs</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Provision the stable baseline, let Auto Scaling handle spikes.</strong> DynamoDB Auto Scaling (free) adjusts provisioned capacity up and down based on utilisation. Set target utilisation at 70% — when actual consumption hits 70% of provisioned, Auto Scaling triggers. Combined with Reserved Capacity on the baseline, this gives throttle protection AND the ~77% discount on committed capacity. The common misconception: Provisioned = rigid. With Auto Scaling it's elastic, just with a reaction lag (60–120 seconds). On-Demand costs 3–6× more for stable traffic — hard to justify when Auto Scaling + Reserved solves the spike concern.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=130?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=130?'DynamoDB expert!':score>=60?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>DynamoDB pricing is deceptively complex. Access patterns, billing mode, and GSI design each have 3–6× cost multipliers if chosen incorrectly.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Scan reads every item regardless of filters — consuming RCUs for all of them. Always use Query with a partition key. Design your data model around your access patterns.</li>
+          <li>Hot partitions cause throttling even when total capacity is adequate. Distribute writes with composite keys or random suffixes; cache hot reads with DAX.</li>
+          <li>Each GSI multiplies write costs. 5 GSIs = 6× write cost. Design GSIs for specific, known queries. Sparse GSIs (partial table) are cheaper than full-table ones.</li>
+          <li>On-Demand mode costs 3–6× Provisioned + Reserved for stable traffic. The breakeven is when your traffic is too unpredictable to provision confidently — not "just in case."</li>
+          <li>DynamoDB Auto Scaling makes Provisioned mode elastic. Reserve capacity for the stable baseline; Auto Scaling handles spikes. This captures most of the Reserved Capacity discount without the throttling risk.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
