@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 12: RDS Cost Optimization — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .trap-grid { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .tg-item { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .tg-item:hover:not(.open){ border-color:var(--danger); }
+    .tg-item.open{ border-color:rgba(239,68,68,0.3); cursor:default; }
+    .ti-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .ti-icon { font-size:1.1rem; }
+    .ti-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .ti-cost { font-size:0.72rem; font-weight:700; padding:2px 9px; border-radius:20px; background:rgba(239,68,68,0.1); color:var(--danger); border:1px solid rgba(239,68,68,0.2); white-space:nowrap; }
+    .ti-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .tg-item.open .ti-body { display:block; }
+
+    .storage-compare { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+    @media(max-width:500px){ .storage-compare{ grid-template-columns:1fr; } }
+    .sc-box { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:10px 13px; font-size:0.77rem; }
+    .sc-head { font-weight:800; margin-bottom:6px; font-size:0.82rem; }
+    .sc-row { display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border); }
+    .sc-row:last-child { border-bottom:none; }
+    .sc-v { font-weight:700; }
+    .sc-v.good { color:var(--success); }
+    .sc-v.bad  { color:var(--danger); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, trapOpened=0, TRAP_TOTAL=5, quizAnswered=false;
+
+function openTrap(id){
+  var el=document.getElementById('trap-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); trapOpened++;
+  if(trapOpened>=TRAP_TOTAL) document.getElementById('trap-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🗄️ RDS Cost Traps</div>
+        <h2>RDS looks simple on the bill — instance + storage. The traps are in the fine print.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">RDS pricing has five dimensions: instance class, storage type/size, Multi-AZ multiplier, I/O charges (Aurora), and backup storage. Most teams only watch the instance line. The other four can silently double the bill — and some traps are genuinely hard to escape once you're in them.</p>
+        <div class="scenario-box">
+          <strong>Your RDS audit starting point:</strong><br>
+          — 3 PostgreSQL RDS instances: production, staging, reporting<br>
+          — All three: db.r5.2xlarge, Multi-AZ, gp2 storage, 30-day automated backup retention<br>
+          — Total RDS bill: $3,840/month<br>
+          — CPU utilisation: prod 22%, staging 4%, reporting 8%<br>
+          — Storage: prod 800GB, staging 120GB, reporting 200GB<br><br>
+          Target: identify waste without compromising production resilience.
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Find the traps →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    trapOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🗄️ Five Cost Traps</div>
+        <h2>Click each trap to understand the cost and the fix</h2>
+        <div class="trap-grid">
+          <div class="tg-item" id="trap-0" onclick="openTrap(0)">
+            <div class="ti-head"><span class="ti-icon">💾</span><span class="ti-title">gp2 vs. gp3 storage — same price, gp2 charges for IOPS automatically</span><span class="ti-cost">$100–$400/mo waste</span></div>
+            <div class="ti-body">gp2 storage scales IOPS with volume size: 3 IOPS/GB, minimum 100 IOPS. 800GB gp2 = 2,400 IOPS included. You pay $0.115/GB/month regardless.<br><br>
+            gp3 storage: $0.115/GB/month (same), but 3,000 IOPS and 125MB/s throughput included <strong>for free</strong>. Additional IOPS: $0.02/provisioned IOPS. Additional throughput: $0.04/MB/s.<br><br>
+            For most RDS workloads, gp3 provides more baseline IOPS at the same price. For 800GB gp2 that was previously "needing" a larger instance to get more IOPS — migrating to gp3 with provisioned IOPS is often cheaper than upsizing the instance class.<br><br>
+            <strong>Migration:</strong> gp2 → gp3 is an in-place storage modification. Zero downtime on Multi-AZ. Completes in hours for large volumes. Do this first — it's the easiest RDS optimisation with zero risk.</div>
+          </div>
+          <div class="tg-item" id="trap-1" onclick="openTrap(1)">
+            <div class="ti-head"><span class="ti-icon">📈</span><span class="ti-title">Storage autoscaling: it only grows — it never shrinks</span><span class="ti-cost">permanent cost creep</span></div>
+            <div class="ti-body">RDS storage autoscaling is convenient — it prevents running out of space. But it only grows. Once your 100GB instance autoscales to 800GB after a one-time data import that was later deleted, you're paying for 800GB forever.<br><br>
+            You cannot shrink RDS storage without creating a new instance and migrating data. A snapshot restore to a smaller instance is the only escape — which requires a maintenance window and data migration planning.<br><br>
+            <strong>Prevention:</strong> set a realistic max autoscaling threshold. Default is unlimited — set it to 2× your expected steady-state size. Monitor FreeStorageSpace CloudWatch metric with an alarm at 20% remaining.<br><br>
+            For the reporting instance in this scenario: 200GB allocated, only 40GB used (checked via FreeStorageSpace). If it was once larger and autoscaled down isn't possible, the next DB refresh (quarterly practice) is the time to right-size the storage.</div>
+          </div>
+          <div class="tg-item" id="trap-2" onclick="openTrap(2)">
+            <div class="ti-head"><span class="ti-icon">🔄</span><span class="ti-title">Multi-AZ on non-production instances doubles the bill</span><span class="ti-cost">$640/mo unnecessary</span></div>
+            <div class="ti-body">Multi-AZ doubles instance cost (standby replica always running) and doubles storage cost (synchronous replication). For production: worth it for automatic failover and durability.<br><br>
+            For staging and reporting: Multi-AZ is almost never justified.<br><br>
+            Staging: db.r5.2xlarge Multi-AZ = $960/month. Single-AZ = $480/month. Saving: <strong>$480/month</strong>.<br>
+            Reporting: db.r5.2xlarge Multi-AZ = $960/month. Single-AZ = $480/month. Saving: <strong>$480/month</strong>.<br><br>
+            Additional: staging at 4% CPU on an r5.2xlarge (8 vCPU, 64GB RAM) is massively over-provisioned. Downsizing staging to db.t3.medium (2 vCPU, 4GB): $68/month. Combined staging saving: $480 + $412 = <strong>$892/month</strong>.</div>
+          </div>
+          <div class="tg-item" id="trap-3" onclick="openTrap(3)">
+            <div class="ti-head"><span class="ti-icon">📅</span><span class="ti-title">30-day automated backup retention × 3 instances</span><span class="ti-cost">$138/mo</span></div>
+            <div class="ti-body">Automated backups are free up to the size of the database storage. Beyond that: $0.095/GB/month for additional backup storage.<br><br>
+            30-day retention on 800GB prod: up to 800GB free, but daily incremental backups accumulate. Actual backup storage: ~1,200GB after 30 days of incremental changes on an active DB = 400GB billed at $0.095 = $38/month.<br><br>
+            Staging (120GB, 30-day retention): $11/month. Reporting (200GB, 30-day retention): $19/month.<br><br>
+            <strong>Fix:</strong> Prod: reduce to 14 days (still covers most compliance requirements, AWS minimum is 1 day). Non-prod: 7 days is sufficient. This reduces backup costs by ~50%.<br><br>
+            Separate concern: automated backups are not the same as manual snapshots. Manual snapshots persist until deleted and cost $0.095/GB/month indefinitely. Audit your manual snapshots — old snapshots from terminated instances are common invisible storage costs.</div>
+          </div>
+          <div class="tg-item" id="trap-4" onclick="openTrap(4)">
+            <div class="ti-head"><span class="ti-icon">💳</span><span class="ti-title">No Reserved Instances on steady production databases</span><span class="ti-cost">$480/mo left on table</span></div>
+            <div class="ti-body">The production db.r5.2xlarge has been running for 14 months with no signs of changing class. On-demand price: $0.960/hr = $691/month.<br><br>
+            1-year Reserved Instance (partial upfront): $0.608/hr = $438/month. Saving: <strong>$253/month</strong>.<br>
+            3-year Reserved Instance (partial upfront): $0.396/hr = $285/month. Saving: <strong>$406/month</strong>.<br><br>
+            RI purchasing decision: does the business have enough visibility to commit to the same instance class for 1–3 years? For a production database that has been stable for 14 months: yes, 1-year RI is low risk. 3-year RI requires more confidence in the architecture staying RDS (vs. Aurora migration, etc.).<br><br>
+            Note: RDS Reserved Instances are class and region specific. If you switch from r5.2xlarge to r6g.2xlarge (ARM-based, ~10% cheaper on-demand), the RI doesn't transfer. Buy RIs only after confirming the instance class is stable.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 5 to continue</span>
+          <button class="btn btn-primary" id="trap-next" onclick="nextStep()" disabled>Storage deep dive →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 170 pts</div>
+        <h2>You're provisioning a new RDS PostgreSQL instance for a microservice. Expected: 500GB data, 2,000 IOPS sustained, 4 vCPU / 32GB RAM needed, production workload. What's the most cost-optimal storage configuration?</h2>
+        <div class="storage-compare">
+          <div class="sc-box">
+            <div class="sc-head">gp2 option</div>
+            <div class="sc-row"><span>500GB × $0.115/GB</span><span class="sc-v bad">$57.50/mo</span></div>
+            <div class="sc-row"><span>IOPS included</span><span class="sc-v bad">1,500 (3 × 500GB)</span></div>
+            <div class="sc-row"><span>Need 2,000 IOPS?</span><span class="sc-v bad">Must size to 667GB</span></div>
+            <div class="sc-row"><span>667GB × $0.115</span><span class="sc-v bad">$76.71/mo</span></div>
+          </div>
+          <div class="sc-box">
+            <div class="sc-head">gp3 option</div>
+            <div class="sc-row"><span>500GB × $0.115/GB</span><span class="sc-v good">$57.50/mo</span></div>
+            <div class="sc-row"><span>IOPS included (free)</span><span class="sc-v good">3,000 baseline</span></div>
+            <div class="sc-row"><span>Need 2,000 IOPS?</span><span class="sc-v good">Already included!</span></div>
+            <div class="sc-row"><span>Total storage cost</span><span class="sc-v good">$57.50/mo</span></div>
+          </div>
+        </div>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: gp2 at 500GB — matches the data size and provides adequate IOPS baseline</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: gp2 at 667GB — scale storage up to get 2,000 IOPS (3 IOPS/GB)</button>
+          <button class="q-opt" onclick="answerQ(2,true,170,2)">C: gp3 at 500GB — includes 3,000 baseline IOPS for free, same per-GB cost as gp2, no need to over-provision storage to hit IOPS target</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: io1 with 2,000 provisioned IOPS — purpose-built for consistent IOPS</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>gp3 is the right default for new RDS volumes.</strong> It provides 3,000 baseline IOPS and 125MB/s throughput free — more than gp2's IOPS-per-GB formula gives at 500GB. io1 is appropriate for sustained &gt;16,000 IOPS requirements (and costs $0.125/provisioned IOPS/month on top of storage). For this workload: gp3 at 500GB = $57.50/month vs. gp2 at 667GB = $76.71/month = $19.21/month saved on storage alone, plus the instance can stay at the actual needed size rather than being sized for IOPS.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=140?'🏆':score>=80?'🎯':'📚'}</div>
+        <h2>${score>=140?'RDS optimised!':score>=80?'Good instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>The $3,840/month audit scenario has at least $1,600/month in recoverable waste — all without touching production resilience. Multi-AZ non-prod, gp2→gp3, backup retention, and Reserved Instances are the standard RDS optimisation playbook.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Migrate all gp2 RDS volumes to gp3 immediately. Same price, 2× baseline IOPS, zero downtime on Multi-AZ. This is the easiest high-ROI change in the RDS cost toolkit.</li>
+          <li>Storage autoscaling only grows. Set a realistic max threshold (2× steady-state) and monitor FreeStorageSpace. Once autoscaled large, you're paying until you snapshot-restore to a new smaller instance.</li>
+          <li>Multi-AZ on staging/dev/reporting is almost always unnecessary. Single-AZ is half the price. If the team needs HA for staging, consider Aurora Serverless v2 (scales to zero off-hours) instead of a full Multi-AZ instance.</li>
+          <li>Reserve production databases that have been stable for 3+ months. 1-year partial upfront RI saves ~36%. 3-year saves ~59%. RDS RIs are instance-class specific — confirm the class won't change before committing to 3 years.</li>
+          <li>Audit manual RDS snapshots. Snapshots from deleted or test instances persist until explicitly deleted and cost $0.095/GB/month indefinitely. The AWS console doesn't prominently surface these — check RDS → Snapshots → Manual.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
