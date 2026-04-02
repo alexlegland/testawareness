@@ -25,7 +25,7 @@
     .auth-link { text-align:center; margin-top:20px; font-size:0.84rem; color:var(--text-muted); }
     .auth-link a { color:var(--primary); text-decoration:none; font-weight:600; }
     .auth-link a:hover { text-decoration:underline; }
-    .divider { border:none; border-top:1px solid var(--border); margin:24px 0; }
+    hr { border:none; border-top:1px solid var(--border); margin:24px 0; }
   </style>
 </head>
 <body>
@@ -45,21 +45,25 @@
       </div>
       <button type="submit" class="auth-btn" id="login-btn">Sign in →</button>
     </form>
-    <hr class="divider" />
+    <hr />
     <div class="auth-link">New to FinOps Academy? <a href="signup.html">Create your organisation →</a></div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="auth.js"></script>
   <script>
-    // Already logged in?
-    if (FinOpsAuth.getCurrentUser()) window.location.href = 'index.html';
+    // Redirect if already logged in
+    FinOpsAuth.getCurrentUser().then(function(user) {
+      if (user) window.location.href = 'index.html';
+    });
 
-    function doLogin(e) {
+    async function doLogin(e) {
       e.preventDefault();
       var btn = document.getElementById('login-btn');
       var err = document.getElementById('error-msg');
       btn.disabled = true; btn.textContent = 'Signing in…';
       err.style.display = 'none';
-      var result = FinOpsAuth.login(
+      var result = await FinOpsAuth.login(
         document.getElementById('email').value,
         document.getElementById('password').value
       );

@@ -34,35 +34,41 @@
 <body>
   <div class="auth-card" id="card-container">
     <div class="auth-logo"><span class="logo-icon">💸</span> FinOps Academy</div>
-    <div id="card-content">
-      <p style="color:var(--text-muted)">Loading invite…</p>
-    </div>
+    <div id="card-content"><p style="color:var(--text-muted)">Loading invite…</p></div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="auth.js"></script>
   <script>
-    // Already logged in?
-    if (FinOpsAuth.getCurrentUser()) window.location.href = 'index.html';
-
     var token = new URLSearchParams(window.location.search).get('token');
-    var invite = token ? FinOpsAuth.getInviteByToken(token) : null;
+    var _invite = null;
+    var _org = null;
+
+    // Already logged in?
+    FinOpsAuth.getCurrentUser().then(function(u){ if(u) window.location.href='index.html'; });
+
+    async function init() {
+      if (!token) { renderInvalid(); return; }
+      _invite = await FinOpsAuth.getInviteByToken(token);
+      if (!_invite) { renderInvalid(); return; }
+      _org = await FinOpsAuth.getOrgById(_invite.org_id);
+      renderInvite();
+    }
 
     function renderInvalid() {
       document.getElementById('card-content').innerHTML = `
         <div class="invalid-card">
           <div style="font-size:2.5rem;margin-bottom:12px">🔗</div>
           <h2>Invite link invalid</h2>
-          <p>This invite link has already been used or is no longer valid. Ask your organisation owner to send you a new one.</p>
+          <p>This invite link has already been used or is no longer valid.<br>Ask your organisation owner to send a new one.</p>
           <a href="login.html" style="display:inline-block;margin-top:16px;color:var(--primary);font-weight:600;text-decoration:none">Go to login →</a>
         </div>`;
     }
 
-    function renderInvite(invite) {
-      var orgs   = FinOpsAuth.getOrgs();
-      var org    = orgs.find(function(o){ return o.id === invite.orgId; });
-      var orgName = org ? org.name : 'your organisation';
-      var track  = FinOpsAuth.TRACKS[invite.track];
-      var color  = track ? track.color : 'var(--primary)';
-
+    function renderInvite() {
+      var orgName = _org ? _org.name : 'your organisation';
+      var track   = FinOpsAuth.TRACKS[_invite.track];
+      var color   = track ? track.color : 'var(--primary)';
       document.getElementById('card-content').innerHTML = `
         <div class="invite-banner" style="background:${color}18;border:1px solid ${color}33;color:${color}">
           <div class="ib-label">You've been invited to</div>
@@ -79,11 +85,11 @@
           </div>
           <div class="form-group">
             <label>Email</label>
-            <input type="email" id="email" placeholder="alex@${orgName.toLowerCase().replace(/\s/g,'')}.com" required autocomplete="email" />
+            <input type="email" id="email" placeholder="alex@company.com" required autocomplete="email" />
           </div>
           <div class="form-group">
             <label>Password</label>
-            <input type="password" id="password" placeholder="Choose a password" required minlength="6" autocomplete="new-password" />
+            <input type="password" id="password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
           </div>
           <button type="submit" class="auth-btn" id="join-btn">Join ${orgName} →</button>
         </form>
@@ -92,13 +98,13 @@
         </div>`;
     }
 
-    function doJoin(e) {
+    async function doJoin(e) {
       e.preventDefault();
       var btn = document.getElementById('join-btn');
       var err = document.getElementById('error-msg');
       btn.disabled = true; btn.textContent = 'Joining…';
       err.style.display = 'none';
-      var result = FinOpsAuth.acceptInvite(
+      var result = await FinOpsAuth.acceptInvite(
         token,
         document.getElementById('name').value,
         document.getElementById('email').value,
@@ -108,18 +114,14 @@
         err.textContent = result.error;
         err.style.display = 'block';
         btn.disabled = false;
-        var orgs = FinOpsAuth.getOrgs();
-        var inv  = FinOpsAuth.getInviteByToken(token);
-        var org  = inv ? orgs.find(function(o){return o.id===inv.orgId;}) : null;
-        btn.textContent = 'Join ' + (org ? org.name : 'organisation') + ' →';
+        btn.textContent = 'Join ' + (_org ? _org.name : 'organisation') + ' →';
       } else {
-        var track = result.user.track;
-        var trackDef = track ? FinOpsAuth.TRACKS[track] : null;
+        var trackDef = result.track ? FinOpsAuth.TRACKS[result.track] : null;
         window.location.href = trackDef ? trackDef.page : 'index.html';
       }
     }
 
-    if (invite) { renderInvite(invite); } else { renderInvalid(); }
+    init();
   </script>
 </body>
 </html>

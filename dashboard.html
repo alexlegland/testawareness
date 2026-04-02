@@ -83,14 +83,14 @@
   </div>
 
   <div class="stats-strip" id="stats-strip">
-    <div class="stat-card"><div class="stat-label">Team members</div><div class="stat-value" id="stat-members">0</div></div>
-    <div class="stat-card"><div class="stat-label">Modules completed</div><div class="stat-value" id="stat-modules">0</div></div>
-    <div class="stat-card"><div class="stat-label">Avg completion</div><div class="stat-value" id="stat-avg">0%</div></div>
-    <div class="stat-card"><div class="stat-label">Active tracks</div><div class="stat-value" id="stat-tracks">0</div></div>
+    <div class="stat-card"><div class="stat-label">Team members</div><div class="stat-value" id="stat-members">—</div></div>
+    <div class="stat-card"><div class="stat-label">Modules completed</div><div class="stat-value" id="stat-modules">—</div></div>
+    <div class="stat-card"><div class="stat-label">Avg completion</div><div class="stat-value" id="stat-avg">—</div></div>
+    <div class="stat-card"><div class="stat-label">Active tracks</div><div class="stat-value" id="stat-tracks">—</div></div>
   </div>
 
   <div class="section-title">Team members</div>
-  <div class="members-grid" id="members-grid"></div>
+  <div class="members-grid" id="members-grid"><p style="color:var(--text-muted);font-size:0.88rem">Loading…</p></div>
 </main>
 
 <!-- Invite Modal -->
@@ -111,20 +111,10 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script src="auth.js"></script>
 <script>
-// ── Auth guard ────────────────────────────────────────────────────────────────
-if (!FinOpsAuth.requireOwner()) throw new Error('not owner');
-
-var user = FinOpsAuth.getCurrentUser();
-var org  = FinOpsAuth.getOrgById(user.orgId);
-FinOpsAuth.injectUserNav();
-
-// ── Page header ───────────────────────────────────────────────────────────────
-document.getElementById('org-title').textContent = (org ? org.name : 'Your organisation') + ' — Training Overview';
-document.getElementById('org-sub').textContent   = 'Organisation owner: ' + user.name;
-document.getElementById('org-badge').textContent = org ? org.name : 'Dashboard';
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function avatarColor(name) {
   var colors = ['#6c47ff','#ff6b35','#22c55e','#f59e0b','#06b6d4','#ec4899'];
@@ -143,91 +133,22 @@ function timeAgo(iso) {
   return Math.floor(diff/86400) + 'd ago';
 }
 
-// ── Render members ─────────────────────────────────────────────────────────────
-function renderMembers() {
-  var members = FinOpsAuth.getOrgMembers(user.orgId).filter(function(m){ return !m.isOwner; });
-  var grid = document.getElementById('members-grid');
-
-  // Stats
-  var totalModules = 0;
-  var totalPct = 0;
-  var activeTracks = new Set();
-
-  if (!members.length) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        <div class="es-icon">👥</div>
-        <h2>No teammates yet</h2>
-        <p>Click <strong>"+ Invite teammate"</strong> above to generate an invite link for a colleague. They'll be assigned to their role-specific training track.</p>
-      </div>`;
-    document.getElementById('stat-members').textContent = '0';
-    document.getElementById('stat-modules').textContent = '0';
-    document.getElementById('stat-avg').textContent = '0%';
-    document.getElementById('stat-tracks').textContent = '0';
-    return;
-  }
-
-  grid.innerHTML = members.map(function(member) {
-    var track    = member.track ? FinOpsAuth.TRACKS[member.track] : null;
-    var color    = track ? track.color : '#6c47ff';
-    var completion = member.track ? FinOpsAuth.getTrackCompletion(member.id, member.track) : {completed:0,total:0,pct:0};
-    totalModules += completion.completed;
-    totalPct += completion.pct;
-    if (member.track) activeTracks.add(member.track);
-
-    return `
-      <div class="member-card">
-        <div class="mc-top">
-          <div class="mc-avatar" style="background:${color}22;color:${color}">${initials(member.name)}</div>
-          <div class="mc-info">
-            <div class="mc-name">${member.name}</div>
-            <div class="mc-meta">${member.email} · Last active ${timeAgo(member.lastActive)}</div>
-          </div>
-          ${track ? `<span class="mc-badge" style="background:${color}18;color:${color};border:1px solid ${color}33">${track.icon} ${track.name}</span>` : '<span class="mc-badge" style="background:var(--surface2);color:var(--text-muted)">No track</span>'}
-          <div class="mc-pct" style="color:${completion.pct===100?'var(--success)':color}">${completion.pct}%</div>
-        </div>
-        ${track ? renderTrackBar(member.id, member.track, track, color) : ''}
-      </div>`;
-  }).join('');
-
-  document.getElementById('stat-members').textContent = members.length;
-  document.getElementById('stat-modules').textContent = totalModules;
-  document.getElementById('stat-avg').textContent     = Math.round(totalPct / members.length) + '%';
-  document.getElementById('stat-tracks').textContent  = activeTracks.size;
-}
-
-function renderTrackBar(userId, trackKey, track, color) {
-  var c = FinOpsAuth.getTrackCompletion(userId, trackKey);
-  var completedIds = FinOpsAuth.getCompletedModules(userId);
-  var moduleDots   = track.modules.map(function(m) {
-    var done = completedIds.includes(m);
-    return '<span title="'+m+'" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(done?color:'var(--border)')+';margin:0 1px;"></span>';
-  }).join('');
-  return `
-    <div class="mc-tracks">
-      <div class="track-row">
-        <div class="tr-label">${track.icon} ${track.name}</div>
-        <div class="tr-bar-wrap"><div class="tr-bar" style="width:${c.pct}%;background:${color}"></div></div>
-        <div class="tr-count">${c.completed}/${c.total}</div>
-      </div>
-      <div style="padding-left:130px;margin-top:4px">${moduleDots}</div>
-    </div>`;
-}
-
-// ── Invite modal ───────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
+var _user = null;
+var _org  = null;
 var selectedRole = null;
 
+// ── Invite modal ───────────────────────────────────────────────────────────────
 function buildRoleGrid() {
   var grid = document.getElementById('role-grid');
   grid.innerHTML = Object.keys(FinOpsAuth.TRACKS).map(function(key) {
     var t = FinOpsAuth.TRACKS[key];
-    return `<div class="role-btn" id="rb-${key}" onclick="selectRole('${key}')">
-      <span class="rb-icon">${t.icon}</span>
-      <span class="rb-name">${t.name}</span>
-    </div>`;
+    return '<div class="role-btn" id="rb-'+key+'" onclick="selectRole(\''+key+'\')">' +
+      '<span class="rb-icon">'+t.icon+'</span>' +
+      '<span class="rb-name">'+t.name+'</span>' +
+      '</div>';
   }).join('');
 }
-buildRoleGrid();
 
 function selectRole(key) {
   selectedRole = key;
@@ -248,10 +169,15 @@ function closeInviteModal() {
   document.getElementById('invite-modal').classList.remove('open');
 }
 
-function generateInvite() {
-  if (!selectedRole) return;
-  var token = FinOpsAuth.createInvite(user.orgId, selectedRole);
-  var link  = window.location.origin + window.location.pathname.replace('dashboard.html','') + 'invite.html?token=' + token;
+async function generateInvite() {
+  if (!selectedRole || !_user) return;
+  var btn = document.getElementById('gen-btn');
+  btn.disabled = true; btn.textContent = 'Generating…';
+  var token = await FinOpsAuth.createInvite(_user.org_id, selectedRole);
+  btn.disabled = false; btn.textContent = 'Generate invite link →';
+  if (!token) { alert('Failed to create invite. Please try again.'); return; }
+  var base = window.location.href.replace('dashboard.html', '');
+  var link = base + 'invite.html?token=' + token;
   document.getElementById('invite-link-input').value = link;
   document.getElementById('invite-result').style.display = 'block';
   document.getElementById('copy-btn').textContent = 'Copy';
@@ -272,10 +198,107 @@ document.getElementById('invite-modal').addEventListener('click', function(e) {
   if (e.target === this) closeInviteModal();
 });
 
+// ── Render members ─────────────────────────────────────────────────────────────
+async function renderMembers() {
+  if (!_user) return;
+  var members = await FinOpsAuth.getOrgMembers(_user.org_id);
+  var grid = document.getElementById('members-grid');
+
+  if (!members.length) {
+    grid.innerHTML = '<div class="empty-state">' +
+      '<div class="es-icon">👥</div>' +
+      '<h2>No teammates yet</h2>' +
+      '<p>Click <strong>"+ Invite teammate"</strong> above to generate an invite link for a colleague. They\'ll be assigned to their role-specific training track.</p>' +
+      '</div>';
+    document.getElementById('stat-members').textContent = '0';
+    document.getElementById('stat-modules').textContent = '0';
+    document.getElementById('stat-avg').textContent = '0%';
+    document.getElementById('stat-tracks').textContent = '0';
+    return;
+  }
+
+  // Fetch completion for all members concurrently
+  var completions = await Promise.all(members.map(function(m) {
+    return m.track ? FinOpsAuth.getTrackCompletion(m.id, m.track) : Promise.resolve({completed:0,total:0,pct:0});
+  }));
+  var completedModulesPerMember = await Promise.all(members.map(function(m) {
+    return FinOpsAuth.getCompletedModules(m.id);
+  }));
+
+  var totalModules = 0;
+  var totalPct = 0;
+  var activeTracks = new Set();
+
+  var html = members.map(function(member, i) {
+    var track  = member.track ? FinOpsAuth.TRACKS[member.track] : null;
+    var color  = track ? track.color : '#6c47ff';
+    var c      = completions[i];
+    var doneIds = completedModulesPerMember[i];
+    totalModules += c.completed;
+    totalPct += c.pct;
+    if (member.track) activeTracks.add(member.track);
+
+    var trackBarHtml = '';
+    if (track) {
+      var dots = track.modules.map(function(m) {
+        var done = doneIds.includes(m);
+        return '<span title="'+m+'" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(done?color:'var(--border)')+';margin:0 1px;"></span>';
+      }).join('');
+      trackBarHtml = '<div class="mc-tracks">' +
+        '<div class="track-row">' +
+        '<div class="tr-label">'+track.icon+' '+track.name+'</div>' +
+        '<div class="tr-bar-wrap"><div class="tr-bar" style="width:'+c.pct+'%;background:'+color+'"></div></div>' +
+        '<div class="tr-count">'+c.completed+'/'+c.total+'</div>' +
+        '</div>' +
+        '<div style="padding-left:130px;margin-top:4px">'+dots+'</div>' +
+        '</div>';
+    }
+
+    var badgeHtml = track
+      ? '<span class="mc-badge" style="background:'+color+'18;color:'+color+';border:1px solid '+color+'33">'+track.icon+' '+track.name+'</span>'
+      : '<span class="mc-badge" style="background:var(--surface2);color:var(--text-muted)">No track</span>';
+
+    return '<div class="member-card">' +
+      '<div class="mc-top">' +
+      '<div class="mc-avatar" style="background:'+color+'22;color:'+color+'">'+initials(member.name)+'</div>' +
+      '<div class="mc-info">' +
+      '<div class="mc-name">'+member.name+'</div>' +
+      '<div class="mc-meta">'+member.email+' · Last active '+timeAgo(member.last_active)+'</div>' +
+      '</div>' +
+      badgeHtml +
+      '<div class="mc-pct" style="color:'+(c.pct===100?'var(--success)':color)+'">'+c.pct+'%</div>' +
+      '</div>' +
+      trackBarHtml +
+      '</div>';
+  }).join('');
+
+  grid.innerHTML = html;
+  document.getElementById('stat-members').textContent = members.length;
+  document.getElementById('stat-modules').textContent = totalModules;
+  document.getElementById('stat-avg').textContent = Math.round(totalPct / members.length) + '%';
+  document.getElementById('stat-tracks').textContent = activeTracks.size;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-renderMembers();
-// Refresh every 30 seconds so live progress shows up
-setInterval(renderMembers, 30000);
+async function init() {
+  _user = await FinOpsAuth.requireOwner();
+  if (!_user) return;
+
+  _org = await FinOpsAuth.getOrgById(_user.org_id);
+  FinOpsAuth.injectUserNav();
+
+  document.getElementById('org-title').textContent = (_org ? _org.name : 'Your organisation') + ' — Training Overview';
+  document.getElementById('org-sub').textContent   = 'Organisation owner: ' + _user.name;
+  document.getElementById('org-badge').textContent = _org ? _org.name : 'Dashboard';
+
+  buildRoleGrid();
+  await renderMembers();
+
+  // Refresh every 30 seconds
+  setInterval(renderMembers, 30000);
+}
+
+init();
 </script>
 </body>
 </html>

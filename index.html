@@ -163,10 +163,12 @@
   Inspired by security awareness training — but for your cloud bill. 💸
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script src="auth.js"></script>
 <script>
-(function(){
-  var user = FinOpsAuth.getCurrentUser();
+(async function(){
+  var user = await FinOpsAuth.getCurrentUser();
   if (!user) return; // guests can still browse
   FinOpsAuth.injectUserNav();
   document.getElementById('nav-badge').style.display = 'none';
@@ -184,12 +186,12 @@
     var href = card.getAttribute('href');
     if (href === page) {
       card.style.boxShadow = '0 0 0 2px var(--primary)';
-      var cta = card.querySelector('.role-cta');
-      if (cta) {
+      var h2 = card.querySelector('h2');
+      if (h2) {
         var cont = document.createElement('div');
         cont.style.cssText = 'font-size:0.72rem;font-weight:700;color:var(--primary);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px';
         cont.textContent = '★ Your assigned track';
-        card.insertBefore(cont, card.querySelector('h2'));
+        card.insertBefore(cont, h2);
       }
     }
   });

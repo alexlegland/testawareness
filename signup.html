@@ -13,7 +13,7 @@
     .auth-logo { display:flex; align-items:center; gap:10px; font-size:1.2rem; font-weight:800; margin-bottom:32px; }
     .auth-logo .logo-icon { font-size:1.6rem; }
     h1 { font-size:1.5rem; font-weight:800; margin-bottom:6px; }
-    .auth-sub { color:var(--text-muted); font-size:0.88rem; margin-bottom:28px; line-height:1.6; }
+    .auth-sub { color:var(--text-muted); font-size:0.88rem; margin-bottom:20px; line-height:1.6; }
     .section-label { font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:20px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
     .form-group { margin-bottom:14px; }
     .form-group label { display:block; font-size:0.78rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
@@ -25,9 +25,8 @@
     .auth-error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:10px 14px; color:var(--danger); font-size:0.82rem; margin-bottom:14px; display:none; }
     .auth-link { text-align:center; margin-top:20px; font-size:0.84rem; color:var(--text-muted); }
     .auth-link a { color:var(--primary); text-decoration:none; font-weight:600; }
-    .perks { display:flex; flex-direction:column; gap:6px; margin-bottom:24px; }
+    .perks { display:flex; flex-direction:column; gap:6px; margin-bottom:20px; }
     .perk { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-muted); }
-    .perk span.icon { font-size:1rem; }
   </style>
 </head>
 <body>
@@ -36,9 +35,9 @@
     <h1>Create your organisation</h1>
     <p class="auth-sub">You'll be the organisation owner — invite your colleagues and track their progress across their role-specific training tracks.</p>
     <div class="perks">
-      <div class="perk"><span class="icon">📊</span> See each teammate's module completion</div>
-      <div class="perk"><span class="icon">🔗</span> Invite by role — PM, DevOps, Developer, CTO, Finance, Architect</div>
-      <div class="perk"><span class="icon">🏆</span> Track XP and scores across your team</div>
+      <div class="perk"><span>📊</span> See each teammate's module completion</div>
+      <div class="perk"><span>🔗</span> Invite by role — PM, DevOps, Developer, CTO, Finance, Architect</div>
+      <div class="perk"><span>🏆</span> Track scores across your team</div>
     </div>
     <div class="auth-error" id="error-msg"></div>
     <form id="signup-form" onsubmit="doSignup(event)">
@@ -58,23 +57,25 @@
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input type="password" id="password" placeholder="Choose a password" required minlength="6" autocomplete="new-password" />
+        <input type="password" id="password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
       </div>
       <button type="submit" class="auth-btn" id="signup-btn">Create organisation →</button>
     </form>
     <div class="auth-link">Already have an account? <a href="login.html">Sign in →</a></div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="auth.js"></script>
   <script>
-    if (FinOpsAuth.getCurrentUser()) window.location.href = 'index.html';
+    FinOpsAuth.getCurrentUser().then(function(u){ if(u) window.location.href='index.html'; });
 
-    function doSignup(e) {
+    async function doSignup(e) {
       e.preventDefault();
       var btn = document.getElementById('signup-btn');
       var err = document.getElementById('error-msg');
       btn.disabled = true; btn.textContent = 'Creating…';
       err.style.display = 'none';
-      var result = FinOpsAuth.createOrg(
+      var result = await FinOpsAuth.createOrg(
         document.getElementById('org-name').value,
         document.getElementById('owner-name').value,
         document.getElementById('email').value,
