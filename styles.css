@@ -71,6 +71,52 @@ nav {
   letter-spacing: 0.5px;
 }
 
+/* ── Nav user badge ── */
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.nav-user-link {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(108,71,255,0.3);
+  transition: background 0.15s;
+}
+.nav-user-link:hover { background: rgba(108,71,255,0.1); }
+
+.nav-user-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.nav-user-role {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.nav-logout {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.nav-logout:hover { color: var(--danger); border-color: var(--danger); }
+
 /* ── Hero ── */
 .hero {
   text-align: center;

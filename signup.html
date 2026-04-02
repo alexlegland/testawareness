@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Organisation — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; box-sizing:border-box; }
+    .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 44px; width:100%; max-width:460px; box-shadow:0 24px 64px rgba(0,0,0,0.4); }
+    .auth-logo { display:flex; align-items:center; gap:10px; font-size:1.2rem; font-weight:800; margin-bottom:32px; }
+    .auth-logo .logo-icon { font-size:1.6rem; }
+    h1 { font-size:1.5rem; font-weight:800; margin-bottom:6px; }
+    .auth-sub { color:var(--text-muted); font-size:0.88rem; margin-bottom:20px; line-height:1.6; }
+    .section-label { font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:20px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:0.78rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+    .form-group input { width:100%; padding:11px 14px; background:var(--surface2); border:1.5px solid var(--border); border-radius:10px; color:var(--text); font-size:0.92rem; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+    .form-group input:focus { border-color:var(--primary); }
+    .auth-btn { width:100%; padding:13px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:0.95rem; font-weight:700; cursor:pointer; margin-top:8px; transition:opacity 0.15s; }
+    .auth-btn:hover { opacity:0.9; }
+    .auth-btn:disabled { opacity:0.5; cursor:default; }
+    .auth-error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:10px 14px; color:var(--danger); font-size:0.82rem; margin-bottom:14px; display:none; }
+    .auth-link { text-align:center; margin-top:20px; font-size:0.84rem; color:var(--text-muted); }
+    .auth-link a { color:var(--primary); text-decoration:none; font-weight:600; }
+    .perks { display:flex; flex-direction:column; gap:6px; margin-bottom:20px; }
+    .perk { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="auth-logo"><span class="logo-icon">💸</span> FinOps Academy</div>
+    <h1>Create your organisation</h1>
+    <p class="auth-sub">You'll be the organisation owner — invite your colleagues and track their progress across their role-specific training tracks.</p>
+    <div class="perks">
+      <div class="perk"><span>📊</span> See each teammate's module completion</div>
+      <div class="perk"><span>🔗</span> Invite by role — PM, DevOps, Developer, CTO, Finance, Architect</div>
+      <div class="perk"><span>🏆</span> Track scores across your team</div>
+    </div>
+    <div class="auth-error" id="error-msg"></div>
+    <form id="signup-form" onsubmit="doSignup(event)">
+      <div class="section-label">Organisation</div>
+      <div class="form-group">
+        <label>Organisation name</label>
+        <input type="text" id="org-name" placeholder="Acme Corp" required />
+      </div>
+      <div class="section-label">Your account</div>
+      <div class="form-group">
+        <label>Your name</label>
+        <input type="text" id="owner-name" placeholder="Jane Smith" required />
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="jane@acme.com" required autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
+      </div>
+      <button type="submit" class="auth-btn" id="signup-btn">Create organisation →</button>
+    </form>
+    <div class="auth-link">Already have an account? <a href="login.html">Sign in →</a></div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    FinOpsAuth.getCurrentUser().then(function(u){ if(u) window.location.href='index.html'; });
+
+    async function doSignup(e) {
+      e.preventDefault();
+      var btn = document.getElementById('signup-btn');
+      var err = document.getElementById('error-msg');
+      btn.disabled = true; btn.textContent = 'Creating…';
+      err.style.display = 'none';
+      var result = await FinOpsAuth.createOrg(
+        document.getElementById('org-name').value,
+        document.getElementById('owner-name').value,
+        document.getElementById('email').value,
+        document.getElementById('password').value
+      );
+      if (result.error) {
+        err.textContent = result.error;
+        err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Create organisation →';
+      } else {
+        window.location.href = 'dashboard.html';
+      }
+    }
+  </script>
+</body>
+</html>
