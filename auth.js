@@ -192,15 +192,16 @@ const FinOpsAuth = (() => {
 
     if (meta._pending === 'org') {
       const result = await _finishOrgSetup(user, meta._org_name, meta._owner_name, user.email);
-      if (result.error) return null;
+      if (result.error) return { error: 'org setup failed: ' + result.error };
       return await getCurrentUser();
     }
     if (meta._pending === 'invite') {
       const result = await _finishInviteSetup(user, meta._invite_token, meta._name, user.email);
-      if (result.error) return null;
+      if (result.error) return { error: 'invite setup failed: ' + result.error };
       return await getCurrentUser();
     }
-    return null;
+    // No pending metadata — profile may already exist
+    return await getCurrentUser();
   }
 
   // ── Organisation queries ──────────────────────────────────────────────────────

@@ -31,30 +31,33 @@
   <script src="config.js"></script>
   <script src="auth.js"></script>
   <script>
+    function showError(detail) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('title').textContent = 'Something went wrong';
+      document.getElementById('msg').innerHTML =
+        '<span class="error" style="font-family:monospace;font-size:0.8rem;word-break:break-all">' + detail + '</span><br><br>' +
+        '<a href="signup.html" style="color:var(--primary);font-weight:600;text-decoration:none">Try signing up again →</a>';
+    }
+
     async function init() {
-      var user = await FinOpsAuth.completePendingSetup();
+      try {
+        var result = await FinOpsAuth.completePendingSetup();
+        var user = result && result.user ? result.user : (result && !result.error ? result : null);
 
-      if (!user) {
-        // Maybe already set up — try getCurrentUser
-        user = await FinOpsAuth.getCurrentUser();
-      }
+        if (result && result.error) { showError('Setup error: ' + result.error); return; }
 
-      if (!user) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('title').textContent = 'Something went wrong';
-        document.getElementById('msg').innerHTML =
-          '<span class="error">We couldn\'t finish setting up your account.</span><br><br>' +
-          '<a href="signup.html" style="color:var(--primary);font-weight:600;text-decoration:none">Try signing up again →</a>';
-        return;
-      }
+        if (!user) user = await FinOpsAuth.getCurrentUser();
+        if (!user) { showError('No session found after confirmation. URL: ' + window.location.href); return; }
 
-      // Redirect based on role
-      if (user.is_owner) {
-        window.location.href = 'dashboard.html';
-      } else if (user.track && FinOpsAuth.TRACKS[user.track]) {
-        window.location.href = FinOpsAuth.TRACKS[user.track].page;
-      } else {
-        window.location.href = 'index.html';
+        if (user.is_owner) {
+          window.location.href = 'dashboard.html';
+        } else if (user.track && FinOpsAuth.TRACKS[user.track]) {
+          window.location.href = FinOpsAuth.TRACKS[user.track].page;
+        } else {
+          window.location.href = 'index.html';
+        }
+      } catch(e) {
+        showError('Exception: ' + e.message);
       }
     }
 
