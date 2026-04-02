@@ -170,7 +170,18 @@ const FinOpsAuth = (() => {
 
   // ── Complete pending setup after email confirmation ───────────────────────────
   async function completePendingSetup() {
-    const { data: { session } } = await _sb.auth.getSession();
+    // Wait for supabase to process the confirmation hash in the URL
+    let { data: { session } } = await _sb.auth.getSession();
+    if (!session) {
+      session = await new Promise(function(resolve) {
+        var timer = setTimeout(function() { sub.unsubscribe(); resolve(null); }, 8000);
+        var { data: { subscription: sub } } = _sb.auth.onAuthStateChange(function(event, sess) {
+          if (event === 'SIGNED_IN' && sess) {
+            clearTimeout(timer); sub.unsubscribe(); resolve(sess);
+          }
+        });
+      });
+    }
     if (!session) return null;
     const user = session.user;
     const meta = user.user_metadata || {};
