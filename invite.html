@@ -117,7 +117,17 @@
         btn.textContent = 'Join ' + (_org ? _org.name : 'organisation') + ' →';
       } else {
         var trackDef = result.track ? FinOpsAuth.TRACKS[result.track] : null;
-        window.location.href = trackDef ? trackDef.page : 'index.html';
+        var trackPage = trackDef ? trackDef.page : 'index.html';
+        document.getElementById('card-content').innerHTML = `
+          <div style="text-align:center;padding:12px 0">
+            <div style="font-size:2.8rem;margin-bottom:16px">📬</div>
+            <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:8px">Check your email</h2>
+            <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6">
+              We sent a confirmation link to your email address.<br>
+              Click it to activate your account and start your training.
+            </p>
+            <a href="${trackPage}" style="display:inline-block;margin-top:20px;color:var(--primary);font-weight:600;font-size:0.9rem;text-decoration:none">Go to my track →</a>
+          </div>`;
       }
     }
 

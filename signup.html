@@ -61,7 +61,12 @@
       </div>
       <button type="submit" class="auth-btn" id="signup-btn">Create organisation →</button>
     </form>
-    <div class="auth-link">Already have an account? <a href="login.html">Sign in →</a></div>
+    <div class="auth-link" id="auth-link">Already have an account? <a href="login.html">Sign in →</a></div>
+    <div id="confirm-msg" style="display:none;text-align:center;padding:12px 0">
+      <div style="font-size:2.8rem;margin-bottom:16px">📬</div>
+      <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:8px">Check your email</h2>
+      <p style="color:var(--text-muted);font-size:0.88rem;line-height:1.6">We sent a confirmation link to your email address.<br>Click it to activate your account and access the dashboard.</p>
+    </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -86,7 +91,9 @@
         err.style.display = 'block';
         btn.disabled = false; btn.textContent = 'Create organisation →';
       } else {
-        window.location.href = 'dashboard.html';
+        document.getElementById('signup-form').style.display = 'none';
+        document.getElementById('auth-link').style.display = 'none';
+        document.getElementById('confirm-msg').style.display = 'block';
       }
     }
   </script>
