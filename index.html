@@ -170,6 +170,14 @@
 (async function(){
   var user = await FinOpsAuth.getCurrentUser();
   if (!user) return; // guests can still browse
+
+  // Redirect owners to dashboard, members to their track
+  if (user.is_owner) { window.location.href = 'dashboard.html'; return; }
+  if (user.track) {
+    var trackDef = FinOpsAuth.TRACKS[user.track];
+    if (trackDef) { window.location.href = trackDef.page; return; }
+  }
+
   FinOpsAuth.injectUserNav();
   document.getElementById('nav-badge').style.display = 'none';
 
