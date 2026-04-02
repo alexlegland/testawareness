@@ -83,33 +83,34 @@ const FinOpsAuth = (() => {
 
   // ── Organisation creation (owner signup) ─────────────────────────────────────
   async function createOrg(orgName, ownerName, email, password) {
-    // 1. Create auth user
+    const callbackUrl = window.location.origin + '/callback.html';
     const { data: authData, error: authErr } = await _sb.auth.signUp({
-      email: email.trim(), password
+      email: email.trim(), password,
+      options: {
+        emailRedirectTo: callbackUrl,
+        data: { _pending: 'org', _org_name: orgName.trim(), _owner_name: ownerName.trim() }
+      }
     });
     if (authErr) return { error: authErr.message };
-    const userId = authData.user.id;
 
-    // 2. Create organisation
+    // If email confirmation is disabled, session is immediate — finish setup now
+    if (authData.session) {
+      return await _finishOrgSetup(authData.user, orgName.trim(), ownerName.trim(), email.trim());
+    }
+    return { pending: true };
+  }
+
+  async function _finishOrgSetup(user, orgName, ownerName, email) {
     const { data: org, error: orgErr } = await _sb
       .from('organisations')
-      .insert({ name: orgName.trim(), owner_id: userId })
-      .select()
-      .single();
+      .insert({ name: orgName, owner_id: user.id })
+      .select().single();
     if (orgErr) return { error: orgErr.message };
-
-    // 3. Create profile
     const { error: profErr } = await _sb.from('profiles').insert({
-      id: userId,
-      email: email.toLowerCase().trim(),
-      name: ownerName.trim(),
-      role: 'owner',
-      track: null,
-      org_id: org.id,
-      is_owner: true
+      id: user.id, email: (email || user.email).toLowerCase(),
+      name: ownerName, role: 'owner', track: null, org_id: org.id, is_owner: true
     });
     if (profErr) return { error: profErr.message };
-
     _clearCache();
     return { org };
   }
@@ -133,34 +134,62 @@ const FinOpsAuth = (() => {
   }
 
   async function acceptInvite(token, name, email, password) {
-    // 1. Verify invite
     const invite = await getInviteByToken(token);
     if (!invite) return { error: 'This invite link is invalid or has already been used.' };
 
-    // 2. Create auth user
+    const callbackUrl = window.location.origin + '/callback.html';
     const { data: authData, error: authErr } = await _sb.auth.signUp({
-      email: email.trim(), password
+      email: email.trim(), password,
+      options: {
+        emailRedirectTo: callbackUrl,
+        data: { _pending: 'invite', _invite_token: token, _name: name.trim() }
+      }
     });
     if (authErr) return { error: authErr.message };
-    const userId = authData.user.id;
 
-    // 3. Create profile
+    // If session is immediate (email confirmation disabled), finish now
+    if (authData.session) {
+      return await _finishInviteSetup(authData.user, token, name.trim(), email.trim());
+    }
+    return { pending: true };
+  }
+
+  async function _finishInviteSetup(user, token, name, email) {
+    const invite = await getInviteByToken(token);
+    if (!invite) return { error: 'Invite not found.' };
     const { error: profErr } = await _sb.from('profiles').insert({
-      id: userId,
-      email: email.toLowerCase().trim(),
-      name: name.trim(),
-      role: invite.track,
-      track: invite.track,
-      org_id: invite.org_id,
-      is_owner: false
+      id: user.id, email: (email || user.email).toLowerCase(),
+      name, role: invite.track, track: invite.track,
+      org_id: invite.org_id, is_owner: false
     });
     if (profErr) return { error: profErr.message };
-
-    // 4. Mark invite used
-    await _sb.from('invites').update({ used: true, used_by: userId }).eq('token', token);
-
+    await _sb.from('invites').update({ used: true, used_by: user.id }).eq('token', token);
     _clearCache();
     return { track: invite.track };
+  }
+
+  // ── Complete pending setup after email confirmation ───────────────────────────
+  async function completePendingSetup() {
+    const { data: { session } } = await _sb.auth.getSession();
+    if (!session) return null;
+    const user = session.user;
+    const meta = user.user_metadata || {};
+
+    // Check if profile already exists
+    const { data: existing } = await _sb.from('profiles').select('*').eq('id', user.id).single();
+    if (existing) { _profileCache = existing; return existing; }
+
+    if (meta._pending === 'org') {
+      const result = await _finishOrgSetup(user, meta._org_name, meta._owner_name, user.email);
+      if (result.error) return null;
+      return await getCurrentUser();
+    }
+    if (meta._pending === 'invite') {
+      const result = await _finishInviteSetup(user, meta._invite_token, meta._name, user.email);
+      if (result.error) return null;
+      return await getCurrentUser();
+    }
+    return null;
   }
 
   // ── Organisation queries ──────────────────────────────────────────────────────
@@ -268,7 +297,7 @@ const FinOpsAuth = (() => {
   return {
     TRACKS,
     login, logout,
-    createOrg,
+    createOrg, completePendingSetup,
     createInvite, getInviteByToken, acceptInvite,
     getCurrentUser, getOrgById, getOrgMembers,
     saveModuleProgress, getUserProgress, getCompletedModules, getTrackCompletion,
