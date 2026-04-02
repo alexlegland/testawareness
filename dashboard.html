@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Dashboard — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── Dashboard layout ──────────────────────────────────────────── */
+    .dash-header { padding:40px 0 28px; border-bottom:1px solid var(--border); margin-bottom:32px; }
+    .dash-header h1 { font-size:1.8rem; font-weight:900; margin-bottom:4px; }
+    .dash-header p  { color:var(--text-muted); font-size:0.9rem; }
+    .dash-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+
+    /* ── Stats strip ───────────────────────────────────────────────── */
+    .stats-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:32px; }
+    @media(max-width:600px){ .stats-strip{ grid-template-columns:repeat(2,1fr); } }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .stat-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:700; }
+    .stat-value { font-size:1.8rem; font-weight:900; margin-top:4px; }
+
+    /* ── Invite modal ──────────────────────────────────────────────── */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:100; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 36px; width:100%; max-width:480px; position:relative; }
+    .modal h2 { font-size:1.2rem; font-weight:800; margin-bottom:6px; }
+    .modal p  { color:var(--text-muted); font-size:0.85rem; margin-bottom:20px; }
+    .modal-close { position:absolute; top:16px; right:18px; background:none; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer; }
+    .role-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
+    @media(max-width:400px){ .role-grid{ grid-template-columns:repeat(2,1fr); } }
+    .role-btn { padding:12px 8px; border-radius:10px; border:2px solid var(--border); background:var(--surface2); cursor:pointer; text-align:center; transition:all 0.15s; }
+    .role-btn:hover { border-color:var(--primary); }
+    .role-btn.selected { border-color:var(--primary); background:rgba(108,71,255,0.1); }
+    .role-btn .rb-icon { font-size:1.4rem; display:block; margin-bottom:4px; }
+    .role-btn .rb-name { font-size:0.75rem; font-weight:700; }
+    .invite-result { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-top:14px; display:none; }
+    .invite-result label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); font-weight:700; display:block; margin-bottom:6px; }
+    .invite-link-row { display:flex; gap:8px; }
+    .invite-link-row input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:0.76rem; font-family:monospace; outline:none; }
+    .copy-btn { padding:9px 14px; background:var(--primary); border:none; border-radius:8px; color:#fff; font-size:0.78rem; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .copy-btn.copied { background:var(--success); }
+
+    /* ── Members table ─────────────────────────────────────────────── */
+    .section-title { font-size:1rem; font-weight:800; margin-bottom:16px; }
+    .members-grid { display:flex; flex-direction:column; gap:10px; }
+    .member-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 20px; }
+    .mc-top { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+    .mc-avatar { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.9rem; flex-shrink:0; }
+    .mc-info { flex:1; min-width:0; }
+    .mc-name { font-weight:700; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mc-meta { font-size:0.75rem; color:var(--text-muted); margin-top:1px; }
+    .mc-badge { font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+    .mc-pct { font-size:1rem; font-weight:800; margin-left:auto; white-space:nowrap; }
+    .mc-tracks { display:flex; flex-direction:column; gap:7px; }
+    .track-row { display:flex; align-items:center; gap:10px; }
+    .tr-label { font-size:0.75rem; font-weight:600; width:120px; flex-shrink:0; color:var(--text-muted); }
+    .tr-bar-wrap { flex:1; background:var(--surface2); border-radius:20px; height:6px; overflow:hidden; }
+    .tr-bar { height:100%; border-radius:20px; transition:width 0.5s ease; }
+    .tr-count { font-size:0.72rem; color:var(--text-muted); font-weight:600; white-space:nowrap; min-width:48px; text-align:right; }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
+    .empty-state .es-icon { font-size:3rem; margin-bottom:12px; }
+    .empty-state h2 { font-size:1.1rem; font-weight:700; margin-bottom:6px; }
+    .empty-state p { font-size:0.85rem; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge" id="org-badge">Dashboard</span>
+</nav>
+<main style="max-width:860px;margin:0 auto;padding:0 20px 60px;">
+
+  <div class="dash-header">
+    <div class="dash-row">
+      <div>
+        <h1 id="org-title">Team Dashboard</h1>
+        <p id="org-sub">Monitor your team's FinOps training progress</p>
+      </div>
+      <button class="btn btn-primary" onclick="openInviteModal()">+ Invite teammate</button>
+    </div>
+  </div>
+
+  <div class="stats-strip" id="stats-strip">
+    <div class="stat-card"><div class="stat-label">Team members</div><div class="stat-value" id="stat-members">0</div></div>
+    <div class="stat-card"><div class="stat-label">Modules completed</div><div class="stat-value" id="stat-modules">0</div></div>
+    <div class="stat-card"><div class="stat-label">Avg completion</div><div class="stat-value" id="stat-avg">0%</div></div>
+    <div class="stat-card"><div class="stat-label">Active tracks</div><div class="stat-value" id="stat-tracks">0</div></div>
+  </div>
+
+  <div class="section-title">Team members</div>
+  <div class="members-grid" id="members-grid"></div>
+</main>
+
+<!-- Invite Modal -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeInviteModal()">✕</button>
+    <h2>Invite a teammate</h2>
+    <p>Choose a role to generate an invite link. The link is single-use and tied to the selected training track.</p>
+    <div class="role-grid" id="role-grid"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="generateInvite()" id="gen-btn" disabled>Generate invite link →</button>
+    <div class="invite-result" id="invite-result">
+      <label>Share this link with your teammate</label>
+      <div class="invite-link-row">
+        <input type="text" id="invite-link-input" readonly />
+        <button class="copy-btn" id="copy-btn" onclick="copyLink()">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="auth.js"></script>
+<script>
+// ── Auth guard ────────────────────────────────────────────────────────────────
+if (!FinOpsAuth.requireOwner()) throw new Error('not owner');
+
+var user = FinOpsAuth.getCurrentUser();
+var org  = FinOpsAuth.getOrgById(user.orgId);
+FinOpsAuth.injectUserNav();
+
+// ── Page header ───────────────────────────────────────────────────────────────
+document.getElementById('org-title').textContent = (org ? org.name : 'Your organisation') + ' — Training Overview';
+document.getElementById('org-sub').textContent   = 'Organisation owner: ' + user.name;
+document.getElementById('org-badge').textContent = org ? org.name : 'Dashboard';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function avatarColor(name) {
+  var colors = ['#6c47ff','#ff6b35','#22c55e','#f59e0b','#06b6d4','#ec4899'];
+  var idx = name.split('').reduce(function(a,c){return a+c.charCodeAt(0);},0) % colors.length;
+  return colors[idx];
+}
+function initials(name) {
+  return name.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().substr(0,2);
+}
+function timeAgo(iso) {
+  if (!iso) return 'Never';
+  var diff = (Date.now() - new Date(iso)) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+// ── Render members ─────────────────────────────────────────────────────────────
+function renderMembers() {
+  var members = FinOpsAuth.getOrgMembers(user.orgId).filter(function(m){ return !m.isOwner; });
+  var grid = document.getElementById('members-grid');
+
+  // Stats
+  var totalModules = 0;
+  var totalPct = 0;
+  var activeTracks = new Set();
+
+  if (!members.length) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <div class="es-icon">👥</div>
+        <h2>No teammates yet</h2>
+        <p>Click <strong>"+ Invite teammate"</strong> above to generate an invite link for a colleague. They'll be assigned to their role-specific training track.</p>
+      </div>`;
+    document.getElementById('stat-members').textContent = '0';
+    document.getElementById('stat-modules').textContent = '0';
+    document.getElementById('stat-avg').textContent = '0%';
+    document.getElementById('stat-tracks').textContent = '0';
+    return;
+  }
+
+  grid.innerHTML = members.map(function(member) {
+    var track    = member.track ? FinOpsAuth.TRACKS[member.track] : null;
+    var color    = track ? track.color : '#6c47ff';
+    var completion = member.track ? FinOpsAuth.getTrackCompletion(member.id, member.track) : {completed:0,total:0,pct:0};
+    totalModules += completion.completed;
+    totalPct += completion.pct;
+    if (member.track) activeTracks.add(member.track);
+
+    return `
+      <div class="member-card">
+        <div class="mc-top">
+          <div class="mc-avatar" style="background:${color}22;color:${color}">${initials(member.name)}</div>
+          <div class="mc-info">
+            <div class="mc-name">${member.name}</div>
+            <div class="mc-meta">${member.email} · Last active ${timeAgo(member.lastActive)}</div>
+          </div>
+          ${track ? `<span class="mc-badge" style="background:${color}18;color:${color};border:1px solid ${color}33">${track.icon} ${track.name}</span>` : '<span class="mc-badge" style="background:var(--surface2);color:var(--text-muted)">No track</span>'}
+          <div class="mc-pct" style="color:${completion.pct===100?'var(--success)':color}">${completion.pct}%</div>
+        </div>
+        ${track ? renderTrackBar(member.id, member.track, track, color) : ''}
+      </div>`;
+  }).join('');
+
+  document.getElementById('stat-members').textContent = members.length;
+  document.getElementById('stat-modules').textContent = totalModules;
+  document.getElementById('stat-avg').textContent     = Math.round(totalPct / members.length) + '%';
+  document.getElementById('stat-tracks').textContent  = activeTracks.size;
+}
+
+function renderTrackBar(userId, trackKey, track, color) {
+  var c = FinOpsAuth.getTrackCompletion(userId, trackKey);
+  var completedIds = FinOpsAuth.getCompletedModules(userId);
+  var moduleDots   = track.modules.map(function(m) {
+    var done = completedIds.includes(m);
+    return '<span title="'+m+'" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(done?color:'var(--border)')+';margin:0 1px;"></span>';
+  }).join('');
+  return `
+    <div class="mc-tracks">
+      <div class="track-row">
+        <div class="tr-label">${track.icon} ${track.name}</div>
+        <div class="tr-bar-wrap"><div class="tr-bar" style="width:${c.pct}%;background:${color}"></div></div>
+        <div class="tr-count">${c.completed}/${c.total}</div>
+      </div>
+      <div style="padding-left:130px;margin-top:4px">${moduleDots}</div>
+    </div>`;
+}
+
+// ── Invite modal ───────────────────────────────────────────────────────────────
+var selectedRole = null;
+
+function buildRoleGrid() {
+  var grid = document.getElementById('role-grid');
+  grid.innerHTML = Object.keys(FinOpsAuth.TRACKS).map(function(key) {
+    var t = FinOpsAuth.TRACKS[key];
+    return `<div class="role-btn" id="rb-${key}" onclick="selectRole('${key}')">
+      <span class="rb-icon">${t.icon}</span>
+      <span class="rb-name">${t.name}</span>
+    </div>`;
+  }).join('');
+}
+buildRoleGrid();
+
+function selectRole(key) {
+  selectedRole = key;
+  document.querySelectorAll('.role-btn').forEach(function(b){ b.classList.remove('selected'); });
+  document.getElementById('rb-'+key).classList.add('selected');
+  document.getElementById('gen-btn').disabled = false;
+  document.getElementById('invite-result').style.display = 'none';
+}
+
+function openInviteModal() {
+  selectedRole = null;
+  document.querySelectorAll('.role-btn').forEach(function(b){ b.classList.remove('selected'); });
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('invite-result').style.display = 'none';
+  document.getElementById('invite-modal').classList.add('open');
+}
+function closeInviteModal() {
+  document.getElementById('invite-modal').classList.remove('open');
+}
+
+function generateInvite() {
+  if (!selectedRole) return;
+  var token = FinOpsAuth.createInvite(user.orgId, selectedRole);
+  var link  = window.location.origin + window.location.pathname.replace('dashboard.html','') + 'invite.html?token=' + token;
+  document.getElementById('invite-link-input').value = link;
+  document.getElementById('invite-result').style.display = 'block';
+  document.getElementById('copy-btn').textContent = 'Copy';
+  document.getElementById('copy-btn').classList.remove('copied');
+}
+
+function copyLink() {
+  var input = document.getElementById('invite-link-input');
+  input.select();
+  document.execCommand('copy');
+  var btn = document.getElementById('copy-btn');
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+}
+
+// Close modal on overlay click
+document.getElementById('invite-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeInviteModal();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderMembers();
+// Refresh every 30 seconds so live progress shows up
+setInterval(renderMembers, 30000);
+</script>
+</body>
+</html>
