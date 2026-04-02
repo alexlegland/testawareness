@@ -273,24 +273,26 @@ const FinOpsAuth = (() => {
 
   // ── Nav badge injection ───────────────────────────────────────────────────────
   async function injectUserNav() {
-    const user = await getCurrentUser();
-    if (!user) return;
     const nav = document.querySelector('nav');
     if (!nav) return;
-    const track = user.track ? TRACKS[user.track] : null;
-    const color = track ? track.color : '#6c47ff';
-    const dashLink = user.is_owner
-      ? `<a href="dashboard.html" class="nav-user-link">📊 Dashboard</a>`
-      : '';
+    const user = await getCurrentUser();
     const badge = document.createElement('div');
     badge.className = 'nav-user';
-    badge.innerHTML = `
-      ${dashLink}
-      <span class="nav-user-name">${user.name}</span>
-      ${track
-        ? `<span class="nav-user-role" style="background:${color}22;color:${color};border:1px solid ${color}44">${track.icon} ${track.name}</span>`
-        : '<span class="nav-user-role">Owner</span>'}
-      <button class="nav-logout" onclick="FinOpsAuth.logout().then(()=>window.location.href='login.html')">Logout</button>`;
+    if (!user) {
+      badge.innerHTML = `<a href="login.html" class="nav-login-btn">Sign in →</a>`;
+    } else {
+      const track = user.track ? TRACKS[user.track] : null;
+      const color = track ? track.color : '#6c47ff';
+      const dashLink = user.is_owner
+        ? `<a href="dashboard.html" class="nav-user-link">📊 Dashboard</a>` : '';
+      badge.innerHTML = `
+        ${dashLink}
+        <span class="nav-user-name">${user.name}</span>
+        ${track
+          ? `<span class="nav-user-role" style="background:${color}22;color:${color};border:1px solid ${color}44">${track.icon} ${track.name}</span>`
+          : '<span class="nav-user-role">Owner</span>'}
+        <button class="nav-logout" onclick="FinOpsAuth.logout().then(()=>window.location.href='login.html')">Logout</button>`;
+    }
     nav.appendChild(badge);
   }
 

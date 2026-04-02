@@ -116,6 +116,17 @@ nav {
   transition: all 0.15s;
 }
 .nav-logout:hover { color: var(--danger); border-color: var(--danger); }
+.nav-login-btn {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 8px;
+  padding: 6px 14px;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.nav-login-btn:hover { opacity: 0.85; }
 
 /* ── Hero ── */
 .hero {
