@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 7: Storage Mistakes — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .bucket-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+    .bucket-card.classified { border-color: var(--border); }
+    .bucket-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .bucket-name { font-family: monospace; font-weight: 700; font-size: 0.9rem; color: var(--accent); }
+    .bucket-size { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+    .bucket-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .bucket-tag {
+      font-size: 0.7rem;
+      padding: 3px 10px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .bucket-tag.warn { border-color: rgba(245,158,11,0.4); color: var(--warning); background: rgba(245,158,11,0.08); }
+    .bucket-tag.ok   { border-color: rgba(34,197,94,0.4);  color: var(--success); background: rgba(34,197,94,0.08); }
+    .bucket-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ba-btn {
+      flex: 1;
+      min-width: 100px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .ba-btn:hover:not(:disabled) { border-color: var(--primary); background: rgba(108,71,255,0.08); }
+    .ba-btn:disabled { cursor: default; }
+    .ba-btn.correct { border-color: var(--success) !important; background: rgba(34,197,94,0.1) !important; color: var(--success) !important; }
+    .ba-btn.wrong   { border-color: var(--danger)  !important; background: rgba(239,68,68,0.1)  !important; color: var(--danger)  !important; }
+    .bucket-result {
+      display: none;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.2);
+    }
+    .bucket-result.show { display: block; }
+
+    .savings-bar-wrap { margin: 14px 0; }
+    .savings-bar-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 0.82rem; }
+    .savings-bar-label { min-width: 160px; color: var(--text-muted); }
+    .savings-bar-track { flex: 1; height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .savings-bar-fill  { height: 100%; border-radius: 99px; }
+    .savings-bar-val   { min-width: 60px; text-align: right; font-weight: 700; color: var(--success); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 7 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var classified = 0;
+
+var buckets = [
+  {
+    id: 'uploads',
+    name: 'prod-user-uploads',
+    size: '4.2 TB',
+    growth: '+200 GB/month',
+    tags: [{ text: 'No lifecycle rule', warn: true }, { text: 'S3 Standard (all)', warn: true }, { text: 'Last accessed: today', warn: false }],
+    correct: 'lifecycle',
+    result: 'This bucket grows 200GB/month forever at S3 Standard ($0.023/GB). A lifecycle rule to move objects to S3 Intelligent-Tiering or Standard-IA after 90 days saves ~40%. Adding Glacier transitions for objects older than 1 year saves another 80% on that portion. Monthly savings at current size: ~$40–60/mo, growing.'
+  },
+  {
+    id: 'artifacts',
+    name: 'ci-build-artifacts',
+    size: '1.1 TB',
+    growth: '+80 GB/month',
+    tags: [{ text: 'No expiry rule', warn: true }, { text: 'Last relevant object: 30 days', warn: true }, { text: 'Oldest object: 4 years', warn: true }],
+    correct: 'lifecycle',
+    result: 'Build artifacts older than 30 days are almost never needed. A 30-day expiry lifecycle rule would drop this bucket from 1.1TB to ~80GB — an 93% reduction. At $0.023/GB, that\'s a saving of ~$23/mo with zero impact on workflows.'
+  },
+  {
+    id: 'backup2019',
+    name: 'db-backups-2019',
+    size: '340 GB',
+    growth: 'None (static)',
+    tags: [{ text: 'Last modified: Jan 2020', warn: true }, { text: 'No owner tag', warn: true }, { text: 'S3 Standard', warn: true }],
+    correct: 'delete',
+    result: 'This bucket hasn\'t been touched in 5+ years. Database backups from 2019 have no practical recovery value for most teams. Verify with your team that no compliance requirement mandates retention, then delete. Saves $7.80/mo for static data with no purpose.'
+  },
+  {
+    id: 'static',
+    name: 'prod-static-assets',
+    size: '48 GB',
+    growth: '+2 GB/month',
+    tags: [{ text: 'CDN-served (CloudFront)', warn: false }, { text: 'Lifecycle rule: active', warn: false }, { text: 'S3 Standard', warn: false }],
+    correct: 'fine',
+    result: 'This bucket is well-managed. It\'s CDN-served (egress cost handled by CloudFront, not per-GET from S3), has a lifecycle rule, and is relatively small. One minor improvement: static assets never change — consider S3 Standard-IA ($0.0125/GB vs $0.023/GB) to save ~$0.50/mo. Not urgent.'
+  },
+  {
+    id: 'staging',
+    name: 'staging-full-copy',
+    size: '3.8 TB',
+    growth: '+150 GB/month',
+    tags: [{ text: 'Full prod data copy', warn: true }, { text: 'Refreshed monthly', warn: true }, { text: 'Rarely accessed', warn: true }],
+    correct: 'lifecycle',
+    result: 'A full production data copy for staging is expensive at 3.8TB and growing. Consider: (1) use a 5–10% sample instead of a full copy — this covers 95% of testing use cases, or (2) move this to S3 Glacier Instant Retrieval for cold staging data. Reducing to a sampled dataset could save $70+/mo. A lifecycle rule to Glacier saves ~60% on the portions not actively accessed.'
+  }
+];
+
+function classify(bucketId, action) {
+  var bucket = buckets.find(function(b) { return b.id === bucketId; });
+  if (!bucket || bucket.done) return;
+  bucket.done = true;
+
+  var correct = action === bucket.correct;
+  if (correct) score += 25;
+  else score += 0;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  document.querySelectorAll('[data-bucket="' + bucketId + '"]').forEach(function(btn) {
+    btn.disabled = true;
+    if (btn.dataset.action === bucket.correct) btn.classList.add('correct');
+    else if (btn.dataset.action === action && !correct) btn.classList.add('wrong');
+  });
+
+  var res = document.getElementById('res-' + bucketId);
+  if (res) res.classList.add('show');
+
+  classified++;
+  if (classified >= buckets.length) {
+    document.getElementById('storage-next-btn').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🗄️ Storage Audit</div>
+        <h2>S3 buckets that grow forever</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          S3 storage cost is deceptively simple: you pay for what exists. Unlike compute, it never goes to zero on its own — every GB stays on the bill until you explicitly move or delete it.
+        </p>
+        <div class="cost-calc" style="margin-bottom:16px">
+          <div class="cost-line"><span class="cost-name">S3 Standard</span><span class="cost-amount" style="color:var(--text-muted)">$0.023/GB/month</span></div>
+          <div class="cost-line"><span class="cost-name">S3 Standard-IA</span><span class="cost-amount" style="color:var(--text-muted)">$0.0125/GB/month (45% cheaper, retrieval fee)</span></div>
+          <div class="cost-line"><span class="cost-name">S3 Glacier Instant</span><span class="cost-amount" style="color:var(--text-muted)">$0.004/GB/month (82% cheaper, ms retrieval)</span></div>
+          <div class="cost-line total"><span class="cost-name">S3 Glacier Deep Archive</span><span class="cost-amount">$0.00099/GB/month (95% cheaper, 12h retrieval)</span></div>
+        </div>
+        <div class="scenario-box">
+          You're doing a quarterly storage audit. Five S3 buckets, all running on S3 Standard. For each one: decide if it's fine, needs a lifecycle rule, or should just be deleted.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start audit →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    classified = 0;
+    buckets.forEach(function(b) { b.done = false; });
+
+    var cardsHTML = buckets.map(function(b) {
+      var tags = b.tags.map(function(t) {
+        return '<span class="bucket-tag' + (t.warn ? ' warn' : ' ok') + '">' + t.text + '</span>';
+      }).join('');
+
+      return '<div class="bucket-card">' +
+        '<div class="bucket-header">' +
+          '<div>' +
+            '<div class="bucket-name">📦 ' + b.name + '</div>' +
+            '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px">' + b.size + ' · ' + b.growth + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="bucket-meta">' + tags + '</div>' +
+        '<div class="bucket-actions">' +
+          '<button class="ba-btn" data-bucket="' + b.id + '" data-action="fine"      onclick="classify(\'' + b.id + '\',\'fine\')"     >✅ Fine as-is</button>' +
+          '<button class="ba-btn" data-bucket="' + b.id + '" data-action="lifecycle" onclick="classify(\'' + b.id + '\',\'lifecycle\')">🔁 Add lifecycle rule</button>' +
+          '<button class="ba-btn" data-bucket="' + b.id + '" data-action="delete"    onclick="classify(\'' + b.id + '\',\'delete\')"   >🗑️ Delete</button>' +
+        '</div>' +
+        '<div class="bucket-result" id="res-' + b.id + '">' + b.result + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🗄️ Storage Audit — 5 × 25 pts</div>
+        <h2>Classify each bucket</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">For each S3 bucket: should it stay as-is, get a lifecycle rule, or be deleted? Your choice reveals the cost impact.</p>
+        ${cardsHTML}
+        <div class="step-actions" style="margin-top:8px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Classify all 5 to continue</span>
+          <button class="btn btn-primary" id="storage-next-btn" onclick="nextStep()" disabled>See savings →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 125;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 80)     { badge = '🏆'; headline = 'Storage-savvy dev!'; desc = 'You identified lifecycle opportunities and knew when to just delete. That\'s $100+/month saved with 30 minutes of work.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The main habit: any bucket growing indefinitely without a lifecycle rule is a future cost problem. Build it in early.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Key distinction: lifecycle rules move data to cheaper tiers automatically. Deletion is for data nobody will ever need. Fine as-is is for well-managed buckets.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>S3 Standard is the most expensive tier ($0.023/GB). Objects that aren't accessed frequently should move to Standard-IA or Glacier automatically via lifecycle rules.</li>
+            <li>Build artifact buckets are the most reliable source of forgotten storage — add a 30-day expiry rule when you create them.</li>
+            <li>5-year-old backups are almost never worth the storage cost. Check compliance requirements, then delete.</li>
+            <li>Full production data copies for staging are expensive. A 5–10% sample covers most testing scenarios at a fraction of the cost.</li>
+            <li>S3 Intelligent-Tiering ($0.023/GB + $0.0025/1K objects monitoring) is worth it for buckets with unpredictable access patterns — it moves objects between tiers automatically.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

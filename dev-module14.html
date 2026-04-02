@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 14: Caching Economics — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .cache-compare { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0; }
+    @media(max-width:500px){ .cache-compare{ grid-template-columns:1fr; } }
+    .cc-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .cc-head { padding:10px 12px; font-weight:800; font-size:0.82rem; border-bottom:1px solid var(--border); text-align:center; }
+    .cc-head.mem { background:rgba(108,71,255,0.12); }
+    .cc-head.redis { background:rgba(255,107,53,0.12); }
+    .cc-head.cdn { background:rgba(34,197,94,0.12); }
+    .cc-row { padding:8px 11px; border-bottom:1px solid var(--border); font-size:0.73rem; line-height:1.5; }
+    .cc-row:last-child { border-bottom:none; }
+    .cc-row strong { display:block; color:var(--text-muted); font-size:0.64rem; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:1px; }
+
+    .calculator { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; }
+    .calc-label { font-size:0.78rem; font-weight:700; margin-bottom:4px; }
+    .calc-slider { width:100%; accent-color:var(--primary); margin-bottom:12px; }
+    .calc-row { display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; padding:5px 0; border-bottom:1px solid var(--border); }
+    .calc-row:last-child { border-bottom:none; font-weight:800; }
+    .calc-val { font-weight:700; }
+    .calc-val.saving { color:var(--success); }
+    .calc-val.cost { color:var(--accent); }
+    .calc-val.neutral { color:var(--text-muted); }
+
+    .trap-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .trap-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .trap-card:hover:not(.open){ border-color:var(--danger); }
+    .trap-card.open{ border-color:rgba(239,68,68,0.35); cursor:default; }
+    .tr-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .tr-icon { font-size:1.1rem; }
+    .tr-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .tr-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .trap-card.open .tr-body { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, trapOpened=0, TRAP_TOTAL=3, quizAnswered=false;
+var hitRate=70, requests=10;
+
+function updateCalc(){
+  var hr=parseInt(document.getElementById('hit-slider').value);
+  var rps=parseInt(document.getElementById('req-slider').value);
+  hitRate=hr; requests=rps;
+  document.getElementById('hit-val').textContent=hr+'%';
+  document.getElementById('req-val').textContent=rps+'M req/month';
+  var cacheMisses=Math.round(rps*(1-hr/100));
+  var dbCostBefore=Math.round(rps*1.25); // $1.25/M DynamoDB reads on-demand
+  var dbCostAfter=Math.round(cacheMisses*1.25);
+  var redisCost=Math.round(0.5 + (rps/10)*13.4); // cache.t3.medium ~$13.4/month baseline, scales
+  // Simplified: cache.t3.medium $0.034/hr = $24.5/mo, handles ~5M req/mo; scale up proportionally
+  var cacheNodes=Math.max(1,Math.ceil(rps/5));
+  redisCost=Math.round(cacheNodes*24.5);
+  var netSaving=dbCostBefore-dbCostAfter-redisCost;
+  document.getElementById('db-before').textContent='$'+dbCostBefore;
+  document.getElementById('db-after').textContent='$'+dbCostAfter;
+  document.getElementById('redis-cost').textContent='-$'+redisCost;
+  document.getElementById('net-saving').textContent=(netSaving>0?'+':'')+netSaving;
+  document.getElementById('net-saving').className='calc-val '+(netSaving>0?'saving':netSaving===0?'neutral':'cost');
+}
+
+function openTrap(id){
+  var el=document.getElementById('trap-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); trapOpened++;
+  if(trapOpened>=TRAP_TOTAL) document.getElementById('trap-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">⚡ Caching Economics</div>
+        <h2>Caching saves money — until it costs more than what it saves</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">A cache is an investment: you pay a fixed cost (ElastiCache node, CloudFront distribution) in exchange for reduced costs on variable spend (database reads, data transfer, compute). The economics only work if the hit rate is high enough and the workload is read-heavy. Get those conditions wrong and you're paying for infrastructure that adds latency without saving money.</p>
+        <div class="scenario-box">
+          <strong>Three caching layers, three cost models:</strong><br>
+          — <strong>In-process (Lambda/Node memory)</strong>: ~$0/month additional cost, but dies with the process — 0% hit rate on cold starts, no sharing across instances<br>
+          — <strong>ElastiCache Redis</strong>: $24.5/month (cache.t3.medium) to $700+/month for large clusters — shared across all instances, persistent TTL<br>
+          — <strong>CloudFront CDN</strong>: $0.0085/10K HTTPS requests + $0.085/GB transfer — eliminates origin hits entirely for cacheable content
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Compare the options →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Cache ROI Calculator</div>
+        <h2>Model the break-even: when does Redis actually save money vs. raw DynamoDB?</h2>
+        <p style="color:var(--text-muted);margin-bottom:12px">Adjust the sliders to see how hit rate and request volume interact with cache economics.</p>
+        <div class="calculator">
+          <div class="calc-label">Cache hit rate: <span id="hit-val">70%</span></div>
+          <input type="range" class="calc-slider" id="hit-slider" min="10" max="99" value="70" oninput="updateCalc()">
+          <div class="calc-label">Monthly read requests: <span id="req-val">10M req/month</span></div>
+          <input type="range" class="calc-slider" id="req-slider" min="1" max="100" value="10" oninput="updateCalc()">
+          <div class="calc-row"><span>DynamoDB reads without cache</span><span class="calc-val cost" id="db-before">$13</span></div>
+          <div class="calc-row"><span>DynamoDB reads with cache (misses only)</span><span class="calc-val" id="db-after">$4</span></div>
+          <div class="calc-row"><span>ElastiCache Redis cost</span><span class="calc-val cost" id="redis-cost">-$25</span></div>
+          <div class="calc-row"><span><strong>Net monthly saving</strong></span><span id="net-saving" class="calc-val saving">+$0</span></div>
+        </div>
+        <div class="cache-compare">
+          <div class="cc-card">
+            <div class="cc-head mem">In-Process</div>
+            <div class="cc-row"><strong>Cost</strong>$0 additional</div>
+            <div class="cc-row"><strong>Hit rate</strong>0% cold start, ~40–70% warm</div>
+            <div class="cc-row"><strong>Lifetime</strong>Process lifetime only</div>
+            <div class="cc-row"><strong>Best for</strong>Config data, static lookups within one container</div>
+          </div>
+          <div class="cc-card">
+            <div class="cc-head redis">ElastiCache</div>
+            <div class="cc-row"><strong>Cost</strong>$24.5–$700+/mo</div>
+            <div class="cc-row"><strong>Hit rate</strong>60–95% for read-heavy apps</div>
+            <div class="cc-row"><strong>Lifetime</strong>Persistent, shared across instances</div>
+            <div class="cc-row"><strong>Best for</strong>Session data, DB query results, API responses</div>
+          </div>
+          <div class="cc-card">
+            <div class="cc-head cdn">CloudFront</div>
+            <div class="cc-row"><strong>Cost</strong>~$0.85/10GB transferred</div>
+            <div class="cc-row"><strong>Hit rate</strong>80–99% for static/semi-static</div>
+            <div class="cc-row"><strong>Lifetime</strong>Edge-cached until TTL or invalidation</div>
+            <div class="cc-row"><strong>Best for</strong>Assets, public API responses, images</div>
+          </div>
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">See the traps →</button></div>
+      </div>`;
+    setTimeout(updateCalc, 50);
+
+  } else if(currentStep===2){
+    trapOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Cache Cost Traps</div>
+        <h2>Three ways caching makes the bill worse — click each</h2>
+        <div class="trap-cards">
+          <div class="trap-card" id="trap-0" onclick="openTrap(0)">
+            <div class="tr-head"><span class="tr-icon">🧊</span><span class="tr-title">Low hit rate: paying for a cache that barely works</span></div>
+            <div class="tr-body">A cache with &lt;50% hit rate on a low-volume workload almost always costs more than it saves. Example: ElastiCache cache.t3.medium at $24.5/month, serving 2M reads/month with 40% hit rate.<br><br>Without cache: 2M × $0.25/M DynamoDB reads = $0.50/month. With cache: $24.5/month ElastiCache + 1.2M DynamoDB misses = $24.80/month. The cache costs <strong style="color:var(--danger)">49× more</strong>.<br><br>Root cause: either the data is too diverse (every request hits a different key), TTL is too short (data expires before it gets reused), or the access pattern is write-heavy. Measure hit rate with ElastiCache CacheHits and CacheMisses CloudWatch metrics before sizing the cache.</div>
+          </div>
+          <div class="trap-card" id="trap-1" onclick="openTrap(1)">
+            <div class="tr-head"><span class="tr-icon">💾</span><span class="tr-title">Cache eviction amplification: thrashing under memory pressure</span></div>
+            <div class="tr-body">When your ElastiCache node runs out of memory, it evicts keys (LRU by default). If your working set is larger than your cache memory, you enter "cache thrashing" — keys are written and immediately evicted, so every request becomes a cache miss, while you're still paying for the cache node.<br><br>Symptom: Evictions CloudWatch metric rises, CacheHitRate drops to &lt;10%, but ElastiCache memory utilisation is at 100%.<br><br>Cost trap: you're paying for both the cache node AND full database read costs, with added network latency for the futile cache round-trip. Fix: either increase node size (cache.r6g.large: $98/month) or reduce your cached dataset (increase TTLs selectively, evict less-accessed key patterns). Monitor Evictions metric — any sustained evictions signal this problem.</div>
+          </div>
+          <div class="trap-card" id="trap-2" onclick="openTrap(2)">
+            <div class="tr-head"><span class="tr-icon">🌊</span><span class="tr-title">Cache stampede (thundering herd on TTL expiry)</span></div>
+            <div class="tr-body">A popular cache key (e.g. homepage data, featured products) expires. At that exact millisecond, 500 concurrent requests all get a cache miss — all 500 hit the database simultaneously, overwhelming it with a query burst.<br><br>Cost impact: a thundering herd event on RDS can spike CPU to 100%, trigger Auto Scaling, and if it causes errors, trigger your retry logic (see Module 13) — compounding the cost.<br><br>Solutions:<br>— <strong>Probabilistic early expiration</strong> (PER): a small random chance of refreshing before TTL expiry — prevents simultaneous expiry<br>— <strong>Cache-aside with mutex</strong>: first miss acquires a lock, populates cache; other requests wait rather than all hitting DB<br>— <strong>Stale-while-revalidate</strong>: serve stale data while refreshing in the background (async pattern)<br><br>The cheapest solution: set TTL with a random offset (base TTL ± 10–20%) so popular keys don't expire simultaneously across your fleet.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 3 to continue</span>
+          <button class="btn btn-primary" id="trap-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>Cache-efficient!</h2>
+        <div class="results-score">160<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>Caching is a multiplier — in both directions. High hit rate on a read-heavy workload makes it one of the best-ROI infrastructure investments. Low hit rate on a low-volume workload makes it an expensive mistake.</p>
+        <div class="xp-gained">🏆 +160 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Always measure CacheHitRate before sizing. A cache with &lt;50% hit rate on low-volume workloads costs more than it saves. Use CloudWatch CacheHits / (CacheHits + CacheMisses) to calculate.</li>
+          <li>The break-even point for ElastiCache is roughly: (DB cost per request × monthly requests × miss rate improvement) > cache monthly cost. Model this before provisioning.</li>
+          <li>Cache thrashing (evictions under memory pressure) is the most expensive cache failure mode — you pay for the cache AND full DB costs. Monitor Evictions metric continuously.</li>
+          <li>Add TTL jitter (±10–20% randomisation) to prevent thundering herds when popular keys expire simultaneously. This is a one-line fix that prevents expensive database spikes.</li>
+          <li>CloudFront is often cheaper than ElastiCache for public-facing, cacheable API responses. $0 per-request for cache hits (only pay for misses forwarded to origin) vs. ElastiCache node cost regardless of utilisation.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

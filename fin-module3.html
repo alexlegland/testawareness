@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 3: Cloud Budgeting — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .budget-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 10px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .budget-row.header {
+      background: #17172a;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    @media (max-width: 520px) {
+      .budget-row { grid-template-columns: 2fr 1fr 1fr; }
+      .budget-row .col-method { display: none; }
+    }
+    .budget-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+    .budget-block-title { background: #17172a; padding: 9px 16px; font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .col-driver { color: var(--text-muted); font-size: 0.78rem; }
+    .trend-up   { color: var(--danger); font-weight: 700; }
+    .trend-flat { color: var(--text-muted); }
+    .trend-pct  { font-size: 0.78rem; }
+    .badge-method { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; font-weight: 700; }
+    .badge-wrong  { background: rgba(239,68,68,0.12); color: var(--danger); }
+    .badge-right  { background: rgba(34,197,94,0.12); color: var(--success); }
+    .badge-ok     { background: rgba(245,158,11,0.12); color: var(--warning); }
+
+    .method-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 14px 0; }
+    @media (max-width: 520px) { .method-cards { grid-template-columns: 1fr; } }
+    .method-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .mc-title { font-weight: 800; font-size: 0.88rem; margin-bottom: 6px; }
+    .mc-when  { font-size: 0.75rem; color: var(--text-muted); margin-bottom:10px; line-height:1.5; }
+    .mc-pro   { font-size: 0.78rem; color: var(--success); padding: 3px 0; }
+    .mc-con   { font-size: 0.78rem; color: var(--danger);  padding: 3px 0; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 3 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var quizAnswered = false;
+
+function answerQuiz(idx, correct, pts) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === idx && correct) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+    if (i === 2 && !correct) b.classList.add('correct'); // mark right answer
+  });
+  document.getElementById('quiz-fb').style.display = 'block';
+  document.getElementById('quiz-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📐 Budgeting</div>
+        <h2>Why "last year +10%" breaks with cloud</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Traditional IT budgets work because costs are fixed: a server lease is $X/month for 3 years. You negotiate it once and put it in the budget. Cloud costs are usage-driven — they grow with product usage, new features, team headcount, and data volume. The same budgeting methodology doesn't fit.</p>
+
+        <div class="budget-block">
+          <div class="budget-block-title">Last year's cloud budget vs. what actually happened</div>
+          <div class="budget-row header">
+            <div>Quarter</div>
+            <div>Budget</div>
+            <div>Actual</div>
+            <div class="col-method">Method used</div>
+          </div>
+          <div class="budget-row">
+            <div>Q1 2024 <div class="col-driver">New auth service launched</div></div>
+            <div>$155,000</div>
+            <div class="trend-up">$192,400 <span class="trend-pct">(+24%)</span></div>
+            <div class="col-method"><span class="badge-method badge-wrong">Last year +10%</span></div>
+          </div>
+          <div class="budget-row">
+            <div>Q2 2024 <div class="col-driver">User growth +40% QoQ</div></div>
+            <div>$160,000</div>
+            <div class="trend-up">$231,800 <span class="trend-pct">(+45%)</span></div>
+            <div class="col-method"><span class="badge-method badge-wrong">Last year +10%</span></div>
+          </div>
+          <div class="budget-row">
+            <div>Q3 2024 <div class="col-driver">Data pipeline scaled</div></div>
+            <div>$168,000</div>
+            <div class="trend-up">$289,100 <span class="trend-pct">(+72%)</span></div>
+            <div class="col-method"><span class="badge-method badge-wrong">Last year +10%</span></div>
+          </div>
+          <div class="budget-row" style="border-bottom:none">
+            <div>Q4 2024 <div class="col-driver">Feature freeze, optimisation</div></div>
+            <div>$175,000</div>
+            <div class="trend-flat">$198,400 <span class="trend-pct">(+13%)</span></div>
+            <div class="col-method"><span class="badge-method badge-wrong">Last year +10%</span></div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          Each quarter ended over budget — not because of waste, but because the budget method didn't account for business growth. When Finance applies a flat percentage uplift to a usage-driven cost, the budget will be wrong whenever growth isn't flat.
+        </div>
+
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See alternatives →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📐 Budgeting Methods</div>
+        <h2>Three approaches that actually work for cloud</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Different companies use different methods depending on their data quality, product maturity, and forecasting culture. None of these is universally "correct" — each fits a different context.</p>
+
+        <div class="method-cards">
+          <div class="method-card" style="border-color:rgba(108,71,255,0.3)">
+            <div class="mc-title" style="color:var(--primary)">📊 Driver-Based</div>
+            <div class="mc-when">Tie cloud cost to a business metric: users, requests, transactions, GB stored. Budget = metric forecast × unit rate.</div>
+            <div style="background:rgba(108,71,255,0.08);border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.78rem">
+              <strong>Example:</strong> $0.85/active user/month × 380K forecast users = $323K budget
+            </div>
+            <div class="mc-pro">✅ Moves with the business automatically</div>
+            <div class="mc-pro">✅ Makes Finance/Eng speak the same language</div>
+            <div class="mc-con">⚠️ Requires agreed unit rate and clean usage data</div>
+            <div class="mc-con">⚠️ Unit rate drifts if architecture changes</div>
+          </div>
+          <div class="method-card" style="border-color:rgba(34,197,94,0.25)">
+            <div class="mc-title" style="color:var(--success)">📅 Rolling Forecast</div>
+            <div class="mc-when">Replace annual budget with a rolling 3–6 month forecast, updated monthly as actuals come in.</div>
+            <div style="background:rgba(34,197,94,0.06);border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.78rem">
+              <strong>Example:</strong> January actual + February trend + March pipeline → Q1 revised forecast
+            </div>
+            <div class="mc-pro">✅ Reacts faster than annual budgets</div>
+            <div class="mc-pro">✅ Reduces end-of-year budget games</div>
+            <div class="mc-con">⚠️ Requires monthly forecast discipline</div>
+            <div class="mc-con">⚠️ Some orgs find annual budgets easier to defend</div>
+          </div>
+          <div class="method-card" style="border-color:rgba(245,158,11,0.25)">
+            <div class="mc-title" style="color:var(--warning)">🔁 Zero-Based (cloud-only)</div>
+            <div class="mc-when">Budget each workload from scratch: what does this system need to run at projected load? Sum up bottom-up.</div>
+            <div style="background:rgba(245,158,11,0.06);border-radius:8px;padding:10px;margin-bottom:10px;font-size:0.78rem">
+              <strong>Example:</strong> Auth service: 4×m5.large @ $0.192/hr × 8,760hr = $6,730/yr
+            </div>
+            <div class="mc-pro">✅ Forces visibility into each workload</div>
+            <div class="mc-pro">✅ Identifies zombie spend in the process</div>
+            <div class="mc-con">⚠️ Very time-intensive — usually done once, not annually</div>
+            <div class="mc-con">⚠️ Forecasts drift as workloads change</div>
+          </div>
+        </div>
+
+        <div class="budget-block">
+          <div class="budget-block-title">Applying driver-based to Q1 2025</div>
+          <div class="budget-row header">
+            <div>Component</div>
+            <div>Unit Rate</div>
+            <div>Forecast Units</div>
+            <div class="col-method">Budget</div>
+          </div>
+          <div class="budget-row">
+            <div>Active users<div class="col-driver">Core platform</div></div>
+            <div>$0.52/user</div>
+            <div>420,000</div>
+            <div class="col-method"><span class="badge-method badge-right">$218,400</span></div>
+          </div>
+          <div class="budget-row">
+            <div>Data processed<div class="col-driver">Analytics pipeline</div></div>
+            <div>$0.18/GB</div>
+            <div>480,000 GB</div>
+            <div class="col-method"><span class="badge-method badge-right">$86,400</span></div>
+          </div>
+          <div class="budget-row">
+            <div>Fixed baseline<div class="col-driver">Infra not tied to usage</div></div>
+            <div>Flat</div>
+            <div>—</div>
+            <div class="col-method"><span class="badge-method badge-ok">$31,000</span></div>
+          </div>
+          <div class="budget-row" style="border-bottom:none;background:rgba(0,0,0,0.1)">
+            <div style="font-weight:700">Total Q1 budget</div>
+            <div></div>
+            <div></div>
+            <div class="col-method" style="font-weight:700;color:var(--accent)">$335,800</div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Test your understanding →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 160 pts</div>
+        <h2>Product launches a feature that doubles the number of API calls per user session. What happens to your driver-based cloud budget?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You built your Q2 budget using $0.52/active user/month, based on current API usage patterns. The new feature ships in week 2.</p>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQuiz(0, false, 0)">A: The budget holds — you budgeted per user, not per API call</button>
+          <button class="q-opt" onclick="answerQuiz(1, false, 0)">B: The budget is wrong but that's Engineering's problem</button>
+          <button class="q-opt" onclick="answerQuiz(2, true, 160)">C: The unit rate assumption broke — revise the rate and reforecast mid-quarter</button>
+          <button class="q-opt" onclick="answerQuiz(3, false, 0)">D: Switch back to last-year-plus-percentage until you have new data</button>
+        </div>
+        <div id="quiz-fb" style="display:none" class="tip-card">
+          ✅ <strong>The unit rate assumption broke.</strong> Driver-based budgets are only as good as the unit rate. If the product changes such that each user now generates 2× the cloud activity, the $0.52/user rate is wrong — the actual cost-per-user is now closer to $0.85–$1.00/user. The right response is to flag the assumption change, revise the unit rate, and update the Q2 forecast. This is a feature of driver-based budgeting, not a failure: the model tells you exactly where the surprise came from.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="quiz-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 160;
+    var badge = score >= 130 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 130 ? 'Budget-fluent!' : score >= 60 ? 'Good instincts!' : 'Keep building!';
+    var desc = score >= 130 ? 'Driver-based budgets break when the driver changes — and that\'s by design. The model surfaces the assumption that broke.' : 'The key shift: cloud budgets need to model the business driver, not just the cost trend. When the driver changes, the budget needs to change with it.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>"Last year +10%" assumes flat growth. Cloud costs can grow 40–70% in a quarter if the product is scaling — a flat uplift will always be wrong in that scenario.</li>
+            <li>Driver-based budgeting ties cloud cost to a business metric (users, GB, requests). When the metric forecast is right and the unit rate is right, the budget is right.</li>
+            <li>Unit rates need to be reviewed when product changes (new features, architecture changes). A feature that doubles API calls per user doubles the unit cost per user.</li>
+            <li>Rolling forecasts reduce the annual budget accuracy problem by updating monthly — useful if your product or growth is hard to predict 12 months out.</li>
+            <li>Finance and Engineering need to build the budget together. Engineering knows which workloads are usage-driven vs. fixed. Finance knows how to translate that into a number the board will accept.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

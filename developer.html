@@ -25,8 +25,8 @@
       ← Back to role selection
     </a>
     <div class="track-badge dev">👨‍💻 Developer Track</div>
-    <h1>You write the code.<br>You own the bill.</h1>
-    <p>8 scenario-based modules covering the most common and costly developer mistakes in the cloud. ~5 min each.</p>
+    <h1>You write the code.<br><span class="highlight">You own the bill.</span></h1>
+    <p>12 modules on the cost consequences of application code decisions — queries, logging, compute model, and the resources that keep running after you forget about them. ~5 min each.</p>
   </div>
 
   <div class="module-list">
@@ -61,7 +61,7 @@
       <div class="module-num">03</div>
       <div class="module-item-icon">🌐</div>
       <div class="module-item-body">
-        <div class="module-item-title">Egress & Data Transfer Costs</div>
+        <div class="module-item-title">Egress &amp; Data Transfer Costs</div>
         <div class="module-item-desc">Your bill spiked $600 overnight. Navigate the data to find why.</div>
       </div>
       <div class="module-item-right">
@@ -70,34 +70,8 @@
       </div>
     </a>
 
-    <div class="module-item locked">
+    <a class="module-item available" href="dev-module6.html">
       <div class="module-num">04</div>
-      <div class="module-item-icon">📝</div>
-      <div class="module-item-body">
-        <div class="module-item-title">IaC Cost Review</div>
-        <div class="module-item-desc">Spot the expensive line in this Terraform diff before it ships to production.</div>
-      </div>
-      <div class="module-item-right">
-        <span class="module-item-xp">🏆 +170 XP</span>
-        <span class="lock-icon">🔒 Coming soon</span>
-      </div>
-    </div>
-
-    <div class="module-item locked">
-      <div class="module-num">05</div>
-      <div class="module-item-icon">🏷️</div>
-      <div class="module-item-body">
-        <div class="module-item-title">Tagging & Ownership</div>
-        <div class="module-item-desc">Finance asks who owns this $4K/mo database. Nobody knows. Now what?</div>
-      </div>
-      <div class="module-item-right">
-        <span class="module-item-xp">🏆 +150 XP</span>
-        <span class="lock-icon">🔒 Coming soon</span>
-      </div>
-    </div>
-
-    <div class="module-item locked">
-      <div class="module-num">06</div>
       <div class="module-item-icon">⚡</div>
       <div class="module-item-body">
         <div class="module-item-title">Serverless Tradeoffs</div>
@@ -105,35 +79,113 @@
       </div>
       <div class="module-item-right">
         <span class="module-item-xp">🏆 +160 XP</span>
-        <span class="lock-icon">🔒 Coming soon</span>
+        <span class="module-item-duration">⏱ ~5 min</span>
       </div>
-    </div>
+    </a>
 
-    <div class="module-item locked">
-      <div class="module-num">07</div>
-      <div class="module-item-icon">🗄️</div>
+    <a class="module-item available" href="dev-module9.html">
+      <div class="module-num">05</div>
+      <div class="module-item-icon">🗃️</div>
       <div class="module-item-body">
-        <div class="module-item-title">Storage Mistakes</div>
-        <div class="module-item-desc">S3 buckets that silently grow forever. Snapshots nobody deletes. Old AMIs everywhere.</div>
+        <div class="module-item-title">The Database Tax</div>
+        <div class="module-item-desc">N+1 queries, missing indexes, full table scans. Application code that looks fine but drives the RDS bill through the roof.</div>
       </div>
       <div class="module-item-right">
         <span class="module-item-xp">🏆 +150 XP</span>
-        <span class="lock-icon">🔒 Coming soon</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
       </div>
-    </div>
+    </a>
 
-    <div class="module-item locked">
-      <div class="module-num">08</div>
-      <div class="module-item-icon">🔄</div>
+    <a class="module-item available" href="dev-module10.html">
+      <div class="module-num">06</div>
+      <div class="module-item-icon">📋</div>
       <div class="module-item-body">
-        <div class="module-item-title">CI/CD Pipeline Costs</div>
-        <div class="module-item-desc">Your test suite runs 200 times a day. Have you looked at what that costs?</div>
+        <div class="module-item-title">Logging at Scale</div>
+        <div class="module-item-desc">Verbose logging feels free in development. At 500 req/sec in production, CloudWatch Logs is the fastest-growing line on your bill.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +140 XP</span>
+        <span class="module-item-duration">⏱ ~5 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="dev-module11.html">
+      <div class="module-num">07</div>
+      <div class="module-item-icon">🧠</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Lambda Memory Tuning</div>
+        <div class="module-item-desc">More memory = higher GB-seconds = higher cost? Not always. For CPU-bound functions, doubling memory can halve duration — and cost the same.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +150 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="dev-module12.html">
+      <div class="module-num">08</div>
+      <div class="module-item-icon">⚡</div>
+      <div class="module-item-body">
+        <div class="module-item-title">DynamoDB Cost Traps</div>
+        <div class="module-item-desc">Scan vs. Query. Hot partitions. GSI write amplification. On-demand vs. provisioned breakpoints. Four traps that silently multiply your DynamoDB bill.</div>
       </div>
       <div class="module-item-right">
         <span class="module-item-xp">🏆 +160 XP</span>
-        <span class="lock-icon">🔒 Coming soon</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
       </div>
-    </div>
+    </a>
+
+    <a class="module-item available" href="dev-module13.html">
+      <div class="module-num">09</div>
+      <div class="module-item-icon">🌪️</div>
+      <div class="module-item-body">
+        <div class="module-item-title">The Retry Storm</div>
+        <div class="module-item-desc">A single bug in retry logic turned a $4 DynamoDB throttling event into $3,200. No backoff, no DLQ, no error classification — learn the patterns that prevent runaway billing.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +170 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="dev-module14.html">
+      <div class="module-num">10</div>
+      <div class="module-item-icon">⚡</div>
+      <div class="module-item-body">
+        <div class="module-item-title">Caching Economics</div>
+        <div class="module-item-desc">A cache with a 40% hit rate at low volume costs 49× more than not caching. Model the break-even, understand the traps, and choose between in-process, Redis, and CDN.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +160 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="dev-module15.html">
+      <div class="module-num">11</div>
+      <div class="module-item-icon">🔌</div>
+      <div class="module-item-body">
+        <div class="module-item-title">RDS Proxy &amp; Connection Pooling</div>
+        <div class="module-item-desc">Lambda scales to 1,000 concurrent. RDS accepts 90 connections. Teams respond by upsizing the database 7×. The fix costs $22/month, not $300/month extra.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +170 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
+    </a>
+
+    <a class="module-item available" href="dev-module16.html">
+      <div class="module-num">12</div>
+      <div class="module-item-icon">🪣</div>
+      <div class="module-item-body">
+        <div class="module-item-title">S3 Request Cost Patterns</div>
+        <div class="module-item-desc">Storage is $0.023/GB. Requests can cost 12,000× more than the storage. LIST is 12.5× pricier than GET. One-object-per-event at 5M events/day costs $750/month — batching costs $0.75.</div>
+      </div>
+      <div class="module-item-right">
+        <span class="module-item-xp">🏆 +160 XP</span>
+        <span class="module-item-duration">⏱ ~6 min</span>
+      </div>
+    </a>
 
   </div>
 
@@ -143,5 +195,9 @@
   Built for dev, CTO &amp; DevOps teams who'd rather spend on features than wasted compute. 💸
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
 </body>
 </html>

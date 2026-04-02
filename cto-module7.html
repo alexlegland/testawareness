@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 7: Cloud Due Diligence — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .dd-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+    @media(max-width:520px){ .dd-grid{ grid-template-columns:1fr; } }
+    .dd-card { background:var(--surface2); border:2px solid var(--border); border-radius:13px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .dd-card:hover:not(.open){ border-color:var(--warning); }
+    .dd-card.open{ border-color:rgba(245,158,11,0.4); cursor:default; }
+    .dd-head { display:flex; align-items:center; gap:10px; padding:12px 14px; }
+    .dd-icon { font-size:1.3rem; flex-shrink:0; }
+    .dd-title { flex:1; font-weight:700; font-size:0.86rem; }
+    .dd-flag { font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:20px; }
+    .dd-flag.red { background:rgba(239,68,68,0.15); color:var(--danger); }
+    .dd-flag.yellow { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .dd-flag.green { background:rgba(34,197,94,0.15); color:var(--success); }
+    .dd-body { display:none; padding:0 14px 12px; border-top:1px solid var(--border); padding-top:11px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .dd-card.open .dd-body { display:block; }
+    .dd-hint { font-size:0.69rem; color:var(--primary); font-weight:600; padding:0 14px 10px; }
+    .dd-card.open .dd-hint { display:none; }
+
+    .decision-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .d-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .d-card:hover:not(:disabled){ border-color:var(--primary); }
+    .d-card:disabled{ cursor:default; }
+    .d-card.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .d-card.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+
+    .valuation-box { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 18px; margin:12px 0; font-size:0.84rem; line-height:2; }
+    .val-highlight { color:var(--accent); font-weight:800; }
+    .val-risk { color:var(--danger); font-weight:700; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, ddOpened=0, DD_TOTAL=6, decisionAnswered=false;
+
+function openDD(id){
+  var el=document.getElementById('dd-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); ddOpened++;
+  if(ddOpened>=DD_TOTAL) document.getElementById('dd-next').disabled=false;
+}
+function decide(idx,correct,pts,ci){
+  if(decisionAnswered)return; decisionAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.d-card').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('dec-fb').style.display='block';
+  document.getElementById('dec-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🔍 M&A Due Diligence</div>
+        <h2>The cloud bill tells a story the P&L doesn't</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You're evaluating an acquisition target: a B2B SaaS company, $8M ARR, growing 40% YoY, asking $48M (6× ARR). Finance has reviewed the P&L. Engineering has reviewed the code. But nobody has reviewed the cloud infrastructure — where the real cost structure lives.</p>
+        <div class="scenario-box">
+          <strong>What you know:</strong><br>
+          — AWS bill: $340,000/month ($4.1M/year = 51% of ARR on cloud alone)<br>
+          — 3 engineers maintain "the platform"<br>
+          — Gross margin reported: 58%<br>
+          — No FinOps function, no tagging, one monolithic AWS account<br><br>
+          <strong>The question:</strong> Is this a bad deal at $48M, a fair deal, or a hidden gem where engineering can recover margin post-acquisition?
+        </div>
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Run the diligence →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    ddOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🔍 DD Findings</div>
+        <h2>Six findings from the cloud review — click each to assess impact</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">AWS Cost Explorer access granted. Click each finding to evaluate.</p>
+        <div class="dd-grid">
+          <div class="dd-card" id="dd-0" onclick="openDD(0)">
+            <div class="dd-head"><span class="dd-icon">💾</span><span class="dd-title">No Savings Plans or Reserved Instances</span><span class="dd-flag red">HIGH RISK</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">$340K/month all at on-demand prices. Their EC2 and RDS fleet has been running steady for 18+ months — visible in Cost Explorer as flat baseline spend. Switching to 1-year Savings Plans + RDS Reserved Instances: conservative 30% savings = <strong style="color:var(--success)">$102,000/month recovered</strong>. This is "free money" post-acquisition — no engineering work required, just a procurement decision. A buyer who knows this can model an improved margin immediately on close.</div>
+          </div>
+          <div class="dd-card" id="dd-1" onclick="openDD(1)">
+            <div class="dd-head"><span class="dd-icon">📊</span><span class="dd-title">Staging = Production size</span><span class="dd-flag yellow">MEDIUM RISK</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">Staging environment costs $82,000/month — identical instance types, multi-AZ RDS, full data replication. Production costs $198,000/month. 41% ratio (industry norm: 5–15%). Root cause: team "promoted" infrastructure configs without right-sizing down. Fixing staging: reduce to single-AZ, smaller instances, on-demand (no reservations needed for non-prod). Conservative estimate: cut staging 60% = <strong style="color:var(--success)">$49,000/month saved</strong>. 2–3 weeks of engineering work.</div>
+          </div>
+          <div class="dd-card" id="dd-2" onclick="openDD(2)">
+            <div class="dd-head"><span class="dd-icon">🌐</span><span class="dd-title">Data transfer: 3× industry average</span><span class="dd-flag red">HIGH RISK</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">Data transfer out: $34,000/month. Revenue: $667K/month (run rate). Transfer/revenue ratio: 5.1%. B2B SaaS typical: 1–2%. Digging in: they serve large file downloads (reports, exports) directly from EC2 → customer browsers without CloudFront. Adding CloudFront + S3 for asset serving: estimated 70% transfer reduction = <strong style="color:var(--success)">$24,000/month saved</strong>. 4–6 weeks engineering effort. Also improves latency, which is a customer experience win.</div>
+          </div>
+          <div class="dd-card" id="dd-3" onclick="openDD(3)">
+            <div class="dd-head"><span class="dd-icon">🗄️</span><span class="dd-title">RDS storage: 12 TB, mostly snapshots</span><span class="dd-flag yellow">MEDIUM RISK</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">RDS storage: 12 TB at $0.115/GB/month = $1,380/month. Not large in dollar terms but: 9 TB of that is automated snapshots with unlimited retention — the default config. Their RDS backup retention is set to "35 days" on snapshots that are also being manually exported to S3 "just in case." Actual operational data: 3 TB. Cleaning up snapshot retention to 14 days + removing duplicate S3 exports: <strong style="color:var(--success)">~$800/month saved</strong>. Low risk, low effort.</div>
+          </div>
+          <div class="dd-card" id="dd-4" onclick="openDD(4)">
+            <div class="dd-head"><span class="dd-icon">⚠️</span><span class="dd-title">Single AWS account — no cost allocation</span><span class="dd-flag red">STRUCTURAL RISK</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">Everything runs in one account: prod, staging, dev, experimental services. No resource tagging (0.3% of resources tagged). This isn't just a FinOps problem — it's a security and governance risk that will require remediation post-acquisition. Migrating to multi-account (AWS Organizations) with proper tagging: 3–4 months of platform engineering, disruption during cutover. <strong style="color:var(--warning)">This is a structural debt item</strong> — doesn't save money directly, but blocks proper cost attribution and adds acquisition integration complexity. Factor into deal terms or remediation budget.</div>
+          </div>
+          <div class="dd-card" id="dd-5" onclick="openDD(5)">
+            <div class="dd-head"><span class="dd-icon">✅</span><span class="dd-title">Clean architecture: ECS Fargate, no self-managed infra</span><span class="dd-flag green">POSITIVE</span></div>
+            <div class="dd-hint">Click to assess →</div>
+            <div class="dd-body">Positive finding: the application layer runs entirely on ECS Fargate with ALB. No self-managed EC2 with custom AMIs, no legacy bare-metal holdovers, no on-premises dependencies. Container images are well-structured (no >2 GB images). This means: low migration risk, compatible with your existing platform patterns, and the team won't need retraining on your stack. The engineering debt is financial (cost efficiency), not architectural. That's fixable.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 6 findings to continue</span>
+          <button class="btn btn-primary" id="dd-next" onclick="nextStep()" disabled>Make the call →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    decisionAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type scenario">🔍 Decision — 180 pts</div>
+        <h2>Based on the diligence, what's your recommendation to the board?</h2>
+        <div class="valuation-box">
+          <strong>Current state:</strong><br>
+          ARR: <span class="val-highlight">$8M</span> · Cloud cost: <span class="val-highlight">$4.1M/year</span> · Gross margin: <span class="val-highlight">58%</span> · Ask: <span class="val-highlight">$48M (6× ARR)</span><br><br>
+          <strong>Identified recoverable savings:</strong><br>
+          Savings Plans/RIs: <span class="val-highlight">$102K/mo</span> · Staging right-size: <span class="val-highlight">$49K/mo</span> · Data transfer: <span class="val-highlight">$24K/mo</span> · Storage cleanup: <span class="val-highlight">$0.8K/mo</span><br>
+          <strong>Total recoverable: <span class="val-highlight">~$175,800/month = $2.1M/year</span></strong><br><br>
+          Post-remediation gross margin: (Revenue $8M − COGS ~$1.5M cloud + other COGS) → gross margin improves from 58% to ~<span class="val-highlight">79%</span>
+        </div>
+        <div class="decision-cards">
+          <div class="d-card" onclick="decide(0,false,0,2)">A: Walk away — 51% of ARR on cloud is unsustainable and indicates deeper operational dysfunction</div>
+          <div class="d-card" onclick="decide(1,false,0,2)">B: Proceed at $48M — the growth rate justifies the current cost structure</div>
+          <div class="d-card" onclick="decide(2,true,180,2)">C: Negotiate price down ($38–40M) citing identified cloud waste as a liability, or structure an earnout tied to margin improvement post-close. The $2.1M/year recovery changes the multiple calculation.</div>
+          <div class="d-card" onclick="decide(3,false,0,2)">D: Proceed at $48M but require $5M in escrow for remediation costs</div>
+        </div>
+        <div id="dec-fb" style="display:none" class="tip-card">
+          ✅ <strong>Cloud waste is a negotiation lever, not just a post-close problem.</strong> $2.1M/year in recoverable savings is 26% of ARR. At 6× ARR multiple, the "true" valuation after normalising cloud costs is closer to 6× $10.1M (normalised ARR after cost recovery) = $60M — or the current $8M ARR at 6× is fair only if the buyer captures the savings. Presenting this to the board: the ask of $48M is reasonable IF the buyer can execute the remediation, making this a 4.7× multiple on the normalised economics. The structural risk (single account, no tagging) warrants a price reduction or remediation escrow, not a deal-killer.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="dec-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=150?'🏆':score>=80?'🎯':'📚'}</div>
+        <h2>${score>=150?'M&A ready!':score>=80?'Good instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/180</span></div>
+        <p>Cloud infrastructure is a material financial asset in any SaaS acquisition. A technical CTO who can model cloud cost recovery provides direct deal leverage.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Request AWS Cost Explorer access (read-only) as part of standard technical due diligence. 30 minutes in Cost Explorer reveals more about operational maturity than 3 hours of architecture review.</li>
+          <li>Look for the "easy money" first: Savings Plans/RI coverage, staging over-sizing, data transfer anomalies. These are recoverable without architectural changes.</li>
+          <li>Staging/production cost ratio is a quick maturity signal. Over 20% suggests no environment governance. Under 5% suggests either good discipline or dangerously under-resourced testing.</li>
+          <li>Single-account, no-tagging architecture is a structural debt item — not just a FinOps problem. Quantify the remediation cost (platform engineering time) and factor it into deal terms.</li>
+          <li>Cloud waste creates deal leverage: recovered margin improves the multiple calculation. A CTO who can model this is participating in the deal valuation, not just the technical risk assessment.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="cto-module8.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

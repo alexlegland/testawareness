@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 8: When the Feature Changes the Pricing — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tier-compare { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:14px 0; }
+    @media(max-width:520px){ .tier-compare{ grid-template-columns:1fr; } }
+    .tier-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:14px 16px; }
+    .tier-card.current { border-color:var(--warning); }
+    .tier-card.proposed { border-color:var(--primary); }
+    .tc-name  { font-weight:800; font-size:0.9rem; margin-bottom:4px; }
+    .tc-price { font-size:1.4rem; font-weight:900; color:var(--accent); line-height:1; margin-bottom:8px; }
+    .tc-infra { font-size:0.72rem; color:var(--text-muted); line-height:1.6; }
+    .tc-margin { font-size:0.82rem; font-weight:700; margin-top:8px; border-top:1px solid var(--border); padding-top:8px; }
+
+    .scenario-chat { display:flex; flex-direction:column; gap:10px; margin:14px 0; }
+    .chat-msg { max-width:85%; padding:11px 14px; border-radius:12px; font-size:0.84rem; line-height:1.6; }
+    .chat-left  { background:var(--surface2); border:1px solid var(--border); align-self:flex-start; border-radius:4px 12px 12px 12px; }
+    .chat-right { background:rgba(108,71,255,0.12); border:1px solid rgba(108,71,255,0.2); align-self:flex-end; border-radius:12px 4px 12px 12px; }
+    .chat-name  { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:4px; }
+
+    .decision-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .d-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .d-card:hover:not(:disabled){ border-color:var(--primary); }
+    .d-card:disabled{ cursor:default; }
+    .d-card.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .d-card.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Product Manager · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, decisionAnswered=false, quizAnswered=false;
+
+function decide(idx,correct,pts,ci){
+  if(decisionAnswered)return; decisionAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.d-card').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('dec-fb').style.display='block';
+  document.getElementById('dec-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type scenario">💲 Pricing Strategy</div>
+        <h2>The feature ships. The margin collapses. Nobody saw it coming.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You're PM for a B2B SaaS project management tool. Flat pricing: $49/user/month. Cloud infrastructure cost is $3.20/user/month — a healthy 93% gross margin. The sales team wants a "video meeting" feature to compete with a rival. Engineering says they can build it in 8 weeks.</p>
+        <div class="scenario-box">
+          <strong>Current economics (10,000 users):</strong><br>
+          Revenue: 10,000 × $49 = $490,000/mo<br>
+          Infrastructure: 10,000 × $3.20 = $32,000/mo<br>
+          Gross margin: 93.5%<br><br>
+          <strong>The ask:</strong> Video meetings up to 50 participants. Engineering estimates: transcoding via AWS Elemental MediaConvert or similar, WebRTC relay via AWS Chime SDK, recording to S3. These aren't free features.
+        </div>
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the cost model →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">💲 Margin Modelling</div>
+        <h2>Video is not like other features. Here's why.</h2>
+        <p style="color:var(--text-muted);margin-bottom:12px">AWS Chime SDK: $0.0017/attendee/minute for video. Average meeting: 45 min, 8 attendees. If users average 3 meetings/month each:</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:12px 0;font-size:0.84rem;line-height:2">
+          Cost per meeting: 8 attendees × 45 min × $0.0017 = <strong style="color:var(--accent)">$0.612</strong><br>
+          Meetings per user/month: 3 × $0.612 = <strong style="color:var(--accent)">$1.84/user/month</strong><br>
+          New infra cost/user: $3.20 + $1.84 = <strong style="color:var(--accent)">$5.04/user/month</strong><br>
+          <span style="color:var(--text-muted);font-size:0.76rem">Assumes 30% of users use video. If 80% adopt it: cost/user rises to $6.60.</span>
+        </div>
+        <div class="tier-compare">
+          <div class="tier-card current">
+            <div class="tc-name">📊 Today</div>
+            <div class="tc-price">$49/user</div>
+            <div class="tc-infra">Infra: $3.20/user<br>No video</div>
+            <div class="tc-margin" style="color:var(--success)">Margin: 93.5%</div>
+          </div>
+          <div class="tier-card" style="border-color:rgba(245,158,11,0.4)">
+            <div class="tc-name">📹 Video (30% adoption)</div>
+            <div class="tc-price">$49/user</div>
+            <div class="tc-infra">Infra: $5.04/user<br>Same price</div>
+            <div class="tc-margin" style="color:var(--warning)">Margin: 89.7%</div>
+          </div>
+          <div class="tier-card" style="border-color:rgba(239,68,68,0.4)">
+            <div class="tc-name">📹 Video (80% adoption)</div>
+            <div class="tc-price">$49/user</div>
+            <div class="tc-infra">Infra: $6.60/user<br>Same price</div>
+            <div class="tc-margin" style="color:var(--danger)">Margin: 86.5%</div>
+          </div>
+        </div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px">A 7-point margin drop on $490K/month revenue = <strong style="color:var(--danger)">$34,300/month</strong> less gross profit. This is before S3 recording storage, which scales with usage. Some customers with heavy usage could cost more to serve than they pay.</p>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Make the call →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    decisionAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type scenario">💲 Decision — 170 pts</div>
+        <h2>How do you respond to the sales team's request?</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">The CEO is supportive. Sales says competitors are winning deals because of the missing video feature. You've now modelled the infra cost impact.</p>
+        <div class="decision-cards">
+          <div class="d-card" onclick="decide(0,false,0,3)">A: Block the feature — the margin impact is too large to accept</div>
+          <div class="d-card" onclick="decide(1,false,0,3)">B: Approve it at flat pricing — the competitive win is worth the margin hit</div>
+          <div class="d-card" onclick="decide(2,false,0,3)">C: Build it as free for all users — video is now table stakes in B2B SaaS</div>
+          <div class="d-card" onclick="decide(3,true,170,3)">D: Propose tiered pricing — include video in a higher tier ($79/user) or as an add-on, so infra cost is covered by users who consume it</div>
+        </div>
+        <div id="dec-fb" style="display:none" class="tip-card">
+          ✅ <strong>Tiered pricing recovers the margin without blocking the feature.</strong> At $79/user for a "Pro" tier including video, the math works: $79 − $6.60 infra = $72.40 gross / $79 = 91.6% margin — better than the flat $49 plan with video. This is how consumption-driven features should be handled: the pricing model must reflect the cost model. Option A misses the competitive opportunity. Options B and C add cost without revenue recovery — viable short-term for growth but unsustainable at scale. The PM's job is to bring the cost model into the pricing conversation, not just approve or block.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="dec-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=140?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=140?'Strategic PM!':score>=60?'Good instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>When a feature's infrastructure cost is consumption-driven, the pricing model must change with it — or margin silently erodes as adoption grows.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Some features (video, AI, storage-heavy workflows) have usage-driven infra costs that scale with adoption. Flat pricing absorbs this invisibly until the margin collapses at scale.</li>
+          <li>Model the cost at different adoption rates: 30%, 50%, 80%. The worst case is when the feature succeeds — high adoption with no price change destroys margin.</li>
+          <li>Tiered pricing (Basic / Pro / Enterprise) lets you align the pricing model with the cost model: higher-cost features live in higher-priced tiers whose margin can absorb them.</li>
+          <li>Add-on pricing (e.g., video as a +$15/user/month add-on) lets you recover cost from the users who consume it without raising the base price for everyone.</li>
+          <li>The PM is the person who connects infra cost to pricing strategy. If you don't bring the cost model to the pricing conversation, nobody else will.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="pm-module9.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

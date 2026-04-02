@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 10: Observability Cost Management — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .obs-pricing { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; }
+    @media(max-width:500px){ .obs-pricing{ grid-template-columns:1fr; } }
+    .op-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+    .op-service { font-weight:800; font-size:0.82rem; margin-bottom:8px; }
+    .op-row { display:flex; justify-content:space-between; font-size:0.75rem; padding:3px 0; border-bottom:1px solid var(--border); }
+    .op-row:last-child { border-bottom:none; }
+    .op-price { font-weight:700; color:var(--accent); }
+
+    .audit-items { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .audit-item { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .audit-item:hover:not(.open){ border-color:var(--warning); }
+    .audit-item.open{ border-color:rgba(245,158,11,0.35); cursor:default; }
+    .ai-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .ai-icon { font-size:1.1rem; }
+    .ai-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .ai-saving { font-size:0.75rem; font-weight:700; color:var(--success); padding:2px 9px; border-radius:20px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); white-space:nowrap; }
+    .ai-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .audit-item.open .ai-body { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+
+    .total-bar { background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:10px; padding:12px 16px; margin:10px 0; }
+    .tb-label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); }
+    .tb-val { font-size:1.6rem; font-weight:900; color:var(--success); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, auditOpened=0, AUDIT_TOTAL=5, quizAnswered=false;
+
+function openAudit(id){
+  var el=document.getElementById('audit-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); auditOpened++;
+  if(auditOpened>=AUDIT_TOTAL) document.getElementById('audit-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">📡 Observability Costs</div>
+        <h2>"We need full observability" — yes, but have you priced it?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Observability tooling — logs, metrics, traces, dashboards — is essential infrastructure. It's also one of the fastest-growing cost categories as engineering teams scale. CloudWatch alone can become the 3rd or 4th largest AWS service on your bill, overtaking EC2 costs at some companies. The issue: most DevOps engineers configure observability for completeness and correctness, not cost-efficiency. The defaults are expensive.</p>
+        <div class="scenario-box">
+          <strong>Your current observability stack:</strong><br>
+          — 45 microservices, each emitting ~30 CloudWatch custom metrics + standard EC2/ECS metrics<br>
+          — CloudWatch Logs: 800 GB/month ingested (all log levels, all environments)<br>
+          — X-Ray tracing: 100% sample rate across all services<br>
+          — CloudWatch dashboards: 12 dashboards, 8 alarms<br>
+          — Current observability cost: $6,200/month<br><br>
+          Target: maintain operational visibility while reducing cost by 50%+.
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the pricing →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📡 Pricing Reference</div>
+        <h2>CloudWatch pricing — every component has a separate cost model</h2>
+        <div class="obs-pricing">
+          <div class="op-card">
+            <div class="op-service">📊 Metrics</div>
+            <div class="op-row"><span>First 10K standard metrics</span><span class="op-price">Free</span></div>
+            <div class="op-row"><span>Custom metrics (per metric/month)</span><span class="op-price">$0.30</span></div>
+            <div class="op-row"><span>High-res metrics (1-sec resolution)</span><span class="op-price">$0.30 × 3</span></div>
+            <div class="op-row"><span>GetMetricData API calls per 1M</span><span class="op-price">$0.01</span></div>
+          </div>
+          <div class="op-card">
+            <div class="op-service">📋 Logs</div>
+            <div class="op-row"><span>Log ingestion (per GB)</span><span class="op-price">$0.50</span></div>
+            <div class="op-row"><span>Log storage (per GB/month)</span><span class="op-price">$0.03</span></div>
+            <div class="op-row"><span>Log insights queries (per GB scanned)</span><span class="op-price">$0.005</span></div>
+            <div class="op-row"><span>Log export to S3</span><span class="op-price">Free</span></div>
+          </div>
+          <div class="op-card">
+            <div class="op-service">🔍 X-Ray Traces</div>
+            <div class="op-row"><span>First 100K traces/month</span><span class="op-price">Free</span></div>
+            <div class="op-row"><span>Per 1M traces recorded</span><span class="op-price">$5.00</span></div>
+            <div class="op-row"><span>Per 1M traces retrieved</span><span class="op-price">$0.50</span></div>
+            <div class="op-row"><span>100% sample rate at scale</span><span class="op-price">⚠️ Expensive</span></div>
+          </div>
+          <div class="op-card">
+            <div class="op-service">📺 Dashboards &amp; Alarms</div>
+            <div class="op-row"><span>Dashboards (per dashboard/month)</span><span class="op-price">$3.00</span></div>
+            <div class="op-row"><span>Standard alarms (per alarm/month)</span><span class="op-price">$0.10</span></div>
+            <div class="op-row"><span>High-res alarms (10-sec)</span><span class="op-price">$0.30</span></div>
+            <div class="op-row"><span>Composite alarms</span><span class="op-price">$0.50</span></div>
+          </div>
+        </div>
+        <p style="font-size:0.79rem;color:var(--text-muted)">Key insight: log <strong>ingestion</strong> at $0.50/GB is 16× more expensive than log <strong>storage</strong> at $0.03/GB. Reducing what you ingest saves far more than optimising how long you retain it.</p>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Run the audit →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    auditOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📡 Observability Audit</div>
+        <h2>Five findings from the $6,200/month stack — click each</h2>
+        <div class="audit-items">
+          <div class="audit-item" id="audit-0" onclick="openAudit(0)">
+            <div class="ai-head"><span class="ai-icon">📋</span><span class="ai-title">DEBUG logs in production: 520 GB/month of noise</span><span class="ai-saving">Save $260/mo</span></div>
+            <div class="ai-body">65% of the 800 GB/month log volume is DEBUG and TRACE level — never reviewed in normal operations, only useful during active debugging sessions. In production, the appropriate log levels are WARN and ERROR for steady-state, INFO for key business events.<br><br>Fix: set log level to INFO in production via environment variable. DEBUG-level logging stays in the code, just silent unless needed. Result: estimated 65% volume reduction = 520 GB/month saved × $0.50/GB = <strong>$260/month</strong>.<br><br>Additional gain: CloudWatch Logs Insights queries (charged per GB scanned) also become cheaper — fewer logs to scan means faster, cheaper queries.</div>
+          </div>
+          <div class="audit-item" id="audit-1" onclick="openAudit(1)">
+            <div class="ai-head"><span class="ai-icon">🗂️</span><span class="ai-title">Log retention: all groups set to "Never Expire"</span><span class="ai-saving">Save $180/mo</span></div>
+            <div class="ai-body">Every CloudWatch Log Group is set to "Never expire." 18 months of historical logs are stored at $0.03/GB/month. Total stored: 6,000 GB = $180/month in storage.<br><br>Most compliance frameworks require 90-day hot retention; 1-year archival. Fix: set CloudWatch log retention to 90 days, then configure automatic export to S3 → S3 Glacier for longer archival at $0.004/GB/month (vs $0.03/GB = 7.5× cheaper).<br><br>Implementing retention policies on existing log groups: use AWS CLI to loop through all groups and set retention. Takes 30 minutes. The storage saving kicks in over the following months as old logs expire. Ongoing saving after cleanup: <strong>~$180/month</strong>.</div>
+          </div>
+          <div class="audit-item" id="audit-2" onclick="openAudit(2)">
+            <div class="ai-head"><span class="ai-icon">📊</span><span class="ai-title">1,350 custom metrics: 60% duplicates across environments</span><span class="ai-saving">Save $243/mo</span></div>
+            <div class="ai-body">45 services × 30 custom metrics = 1,350 custom metrics. But closer inspection: 810 of these are identical metrics from dev and staging environments — same metric names, different dimensions. Dev and staging custom metrics have zero operational value (no production alerts, not in any dashboard).<br><br>Fix: remove custom metrics emission from non-production environments. Use standard metrics only (free tier) in dev/staging. Result: 810 metrics × $0.30 = <strong>$243/month</strong> saved.<br><br>Additional: review the remaining 540 production metrics. Are all 30 custom metrics per service actually read? Check CloudWatch Metrics → "Find unused metrics" — any metric with 0 dashboard references and 0 alarms in the last 30 days is a candidate for removal.</div>
+          </div>
+          <div class="audit-item" id="audit-3" onclick="openAudit(3)">
+            <div class="ai-head"><span class="ai-icon">🔍</span><span class="ai-title">X-Ray: 100% sample rate on all services</span><span class="ai-saving">Save $740/mo</span></div>
+            <div class="ai-body">100% X-Ray sampling at 45 services × average 2,000 req/min = 90,000 traces/minute = 5.4 billion traces/month. At $5/million = <strong>$27,000/month</strong> (the actual bill is $740 because most trace data is compressed and some services have lower traffic — this is simplified for the scenario).<br><br>Appropriate sampling strategy:<br>— <strong>Critical user journeys</strong>: 100% (checkout, payment, auth)<br>— <strong>High-volume read APIs</strong>: 1–5% (enough for p99 latency visibility)<br>— <strong>Internal background jobs</strong>: 0.1% or on-error only<br>— <strong>Health check endpoints</strong>: 0%<br><br>AWS X-Ray supports reservoir + fixed-rate sampling rules per service, URL pattern, and method. Implement centrally via X-Ray sampling rules (no code change required). Target: 5% average = 95% fewer traces = <strong>$740+/month</strong> saved at the scenario's scale.</div>
+          </div>
+          <div class="audit-item" id="audit-4" onclick="openAudit(4)">
+            <div class="ai-head"><span class="ai-icon">📺</span><span class="ai-title">12 dashboards — 7 never opened in the last 60 days</span><span class="ai-saving">Save $21/mo</span></div>
+            <div class="ai-body">$3/dashboard/month × 12 = $36/month. CloudWatch Logs Insights shows that 7 dashboards have 0 API calls in 60 days — never viewed. Small dollar amount, but symptomatic: unused dashboards usually contain unused alarms and unused custom metrics too.<br><br>Fix: delete unused dashboards. Before deletion, ask the team who created them — sometimes dashboards are only used during incidents or quarterly reviews. If in doubt, export as JSON and archive to S3, then delete. The JSON template can be re-deployed in minutes if needed.<br><br>More importantly: treat this as a signal audit trigger. For each deleted dashboard, trace its 5–10 widgets back to their custom metrics and alarms. This one action often reveals 50+ unused metrics across the stack.</div>
+          </div>
+        </div>
+        <div class="total-bar"><div class="tb-label">Total identified saving</div><div class="tb-val">$1,444/month</div></div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 5 to continue</span>
+          <button class="btn btn-primary" id="audit-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>Observability optimised!</h2>
+        <div class="results-score">170<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>Full observability doesn't mean logging everything at DEBUG level forever. The most effective observability stacks are opinionated about what they collect, at what resolution, and for how long.</p>
+        <div class="xp-gained">🏆 +170 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Log ingestion ($0.50/GB) dominates observability cost — it's 16× the storage rate. Reducing log verbosity in production is the single highest-ROI observability optimisation.</li>
+          <li>Set CloudWatch log retention on every log group. "Never expire" is the default and the most expensive option. 90-day hot + S3 Glacier archival is compliance-friendly and 7.5× cheaper than CloudWatch storage.</li>
+          <li>Remove custom metrics from non-production environments. Dev and staging custom metrics cost the same as production but deliver zero operational value.</li>
+          <li>X-Ray at 100% sample rate is expensive at scale. Use reservoir + fixed-rate sampling rules: 100% on critical paths, 1–5% on high-volume reads, 0.1% on background jobs. No code change required — configure via X-Ray sampling rules.</li>
+          <li>Unused dashboards are a cost audit trigger. Each unused dashboard likely points to unused alarms, unused custom metrics, and log groups with unnecessarily high retention. Start with dashboards to find the full chain of waste.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

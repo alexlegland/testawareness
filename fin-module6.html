@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 6: The FinOps Business Case — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .roi-input-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .roi-input-row:last-child { border-bottom: none; }
+    .roi-label { flex: 1; font-size: 0.85rem; }
+    .roi-label span { display: block; font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+    .roi-slider { width: 130px; accent-color: var(--primary); }
+    .roi-val { min-width: 80px; text-align: right; font-weight: 700; font-size: 0.88rem; color: var(--accent); }
+
+    .roi-result { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin: 14px 0; }
+    .roi-result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 480px) { .roi-result-grid { grid-template-columns: 1fr 1fr; } }
+    .rr-item { text-align: center; }
+    .rr-val  { font-size: 1.5rem; font-weight: 900; color: var(--accent); line-height: 1; }
+    .rr-lbl  { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
+    .rr-good { color: var(--success); }
+    .rr-bad  { color: var(--danger); }
+
+    .lever-list { margin: 10px 0; }
+    .lever-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .lever-item:last-child { border-bottom: none; }
+    .lever-icon { font-size: 1.2rem; flex-shrink: 0; }
+    .lever-body { flex: 1; font-size: 0.83rem; line-height: 1.6; }
+    .lever-body strong { color: var(--text); }
+    .lever-pct { font-weight: 800; font-size: 0.85rem; min-width: 50px; text-align: right; }
+
+    .pitch-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .p-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .p-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .p-opt:disabled { cursor: default; }
+    .p-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .p-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 6 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var pitchAnswered = false;
+
+// ROI model state
+var roiState = {
+  monthlySpend: 300,   // $K
+  wastePercent: 28,    // % of spend that is waste (industry avg ~32%)
+  capturePercent: 60,  // % of waste FinOps can realistically capture
+  teamCost: 15,        // $K/month (one dedicated FinOps engineer @ ~$180K/yr = $15K/mo fully loaded)
+};
+
+function calcROI() {
+  var spend = roiState.monthlySpend * 1000;
+  var wasteAmt = spend * (roiState.wastePercent / 100);
+  var savings = wasteAmt * (roiState.capturePercent / 100);
+  var cost = roiState.teamCost * 1000;
+  var netMonthly = savings - cost;
+  var roiPct = cost > 0 ? Math.round((netMonthly / cost) * 100) : 0;
+  var payback = netMonthly > 0 ? (cost / netMonthly).toFixed(1) : '∞';
+  return { savings: savings, cost: cost, netMonthly: netMonthly, roiPct: roiPct, payback: payback, wasteAmt: wasteAmt };
+}
+
+function fmt(n) {
+  if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return '$' + Math.round(n / 1000) + 'K';
+  return '$' + Math.round(n);
+}
+
+function updateROI() {
+  var r = calcROI();
+  document.getElementById('roi-waste-val').textContent = roiState.wastePercent + '%';
+  document.getElementById('roi-capture-val').textContent = roiState.capturePercent + '%';
+  document.getElementById('roi-team-val').textContent = '$' + roiState.teamCost + 'K/mo';
+  document.getElementById('roi-spend-val').textContent = '$' + roiState.monthlySpend + 'K/mo';
+
+  document.getElementById('result-savings').textContent = fmt(r.savings);
+  document.getElementById('result-cost').textContent    = fmt(r.cost);
+  document.getElementById('result-net').textContent     = (r.netMonthly >= 0 ? '+' : '') + fmt(r.netMonthly);
+  document.getElementById('result-roi').textContent     = (r.roiPct >= 0 ? '+' : '') + r.roiPct + '%';
+  document.getElementById('result-payback').textContent = r.payback + (r.payback !== '∞' ? ' mo' : '');
+
+  var netEl = document.getElementById('result-net');
+  var roiEl = document.getElementById('result-roi');
+  netEl.className = 'rr-val ' + (r.netMonthly >= 0 ? 'rr-good' : 'rr-bad');
+  roiEl.className = 'rr-val ' + (r.roiPct >= 0 ? 'rr-good' : 'rr-bad');
+}
+
+function setSlider(field, val) {
+  roiState[field] = parseInt(val);
+  updateROI();
+}
+
+function answerPitch(idx) {
+  if (pitchAnswered) return;
+  pitchAnswered = true;
+  var correct = idx === 1;
+  if (correct) score += 170;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.p-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === 1) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('pitch-fb').style.display = 'block';
+  document.getElementById('pitch-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">📊 Business Case</div>
+        <h2>The CFO asks: "Why should we invest in FinOps?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Cloud bills are growing. The CFO is open to investing in tools, process, or headcount — but wants to see a return. "FinOps" sounds like overhead. You need to make the financial case.</p>
+        <div class="scenario-box">
+          <strong>Context:</strong> Your company spends $300K/month on cloud (~$3.6M/year). Costs have grown 40% in 12 months. Finance has no formal FinOps function — it's ad hoc. Engineering reviews the bill occasionally. A Flexera/Gartner study puts average cloud waste at 28–32% of spend. That's $84K–$96K/month in potentially recoverable spend.
+          <br><br>
+          In the next step, you'll build the ROI model interactively.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Build the model →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🧮 ROI Calculator</div>
+        <h2>Build the FinOps business case</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Adjust the assumptions. The model updates in real time.</p>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:14px">
+          <div class="roi-input-row">
+            <div class="roi-label">Monthly cloud spend
+              <span>Current baseline</span>
+            </div>
+            <input type="range" class="roi-slider" min="100" max="1000" step="50" value="300" oninput="setSlider('monthlySpend', this.value)">
+            <div class="roi-val" id="roi-spend-val">$300K/mo</div>
+          </div>
+          <div class="roi-input-row">
+            <div class="roi-label">Estimated waste %
+              <span>Industry avg: 28–32% (Flexera 2024 State of the Cloud)</span>
+            </div>
+            <input type="range" class="roi-slider" min="5" max="50" step="1" value="28" oninput="setSlider('wastePercent', this.value)">
+            <div class="roi-val" id="roi-waste-val">28%</div>
+          </div>
+          <div class="roi-input-row">
+            <div class="roi-label">Capture rate %
+              <span>Realistic FinOps programs capture 40–70% of waste in year 1</span>
+            </div>
+            <input type="range" class="roi-slider" min="10" max="90" step="5" value="60" oninput="setSlider('capturePercent', this.value)">
+            <div class="roi-val" id="roi-capture-val">60%</div>
+          </div>
+          <div class="roi-input-row">
+            <div class="roi-label">FinOps team cost
+              <span>1 FTE fully loaded ~$180K/yr = $15K/mo; tooling ~$3–8K/mo</span>
+            </div>
+            <input type="range" class="roi-slider" min="5" max="50" step="1" value="15" oninput="setSlider('teamCost', this.value)">
+            <div class="roi-val" id="roi-team-val">$15K/mo</div>
+          </div>
+        </div>
+
+        <div class="roi-result">
+          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:12px">Monthly ROI Model</div>
+          <div class="roi-result-grid">
+            <div class="rr-item">
+              <div class="rr-val" id="result-savings">$50K</div>
+              <div class="rr-lbl">Monthly savings</div>
+            </div>
+            <div class="rr-item">
+              <div class="rr-val" id="result-cost" style="color:var(--danger)">$15K</div>
+              <div class="rr-lbl">Program cost</div>
+            </div>
+            <div class="rr-item">
+              <div class="rr-val rr-good" id="result-net">+$35K</div>
+              <div class="rr-lbl">Net monthly</div>
+            </div>
+            <div class="rr-item">
+              <div class="rr-val rr-good" id="result-roi">+233%</div>
+              <div class="rr-lbl">Monthly ROI</div>
+            </div>
+            <div class="rr-item">
+              <div class="rr-val" id="result-payback">0.4 mo</div>
+              <div class="rr-lbl">Payback period</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lever-list">
+          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">What FinOps typically recovers — and typical capture rates</div>
+          <div class="lever-item">
+            <div class="lever-icon">😴</div>
+            <div class="lever-body"><strong>Idle/zombie resources</strong> — instances running with <5% CPU, unused Elastic IPs, empty load balancers, forgotten dev/test environments</div>
+            <div class="lever-pct" style="color:var(--success)">8–15%</div>
+          </div>
+          <div class="lever-item">
+            <div class="lever-icon">📦</div>
+            <div class="lever-body"><strong>Right-sizing</strong> — EC2, RDS, and containers over-provisioned for workload. Often 2–4× the needed size due to conservative initial estimates</div>
+            <div class="lever-pct" style="color:var(--success)">5–12%</div>
+          </div>
+          <div class="lever-item">
+            <div class="lever-icon">🔒</div>
+            <div class="lever-body"><strong>Commitment coverage</strong> — moving workloads from on-demand to Savings Plans or Reserved Instances. Discounts of 30–66% on eligible spend</div>
+            <div class="lever-pct" style="color:var(--success)">6–15%</div>
+          </div>
+          <div class="lever-item">
+            <div class="lever-icon">📁</div>
+            <div class="lever-body"><strong>Storage tier optimisation</strong> — S3 objects that haven't been accessed in 90+ days moved from Standard ($0.023/GB) to Intelligent-Tiering or Glacier</div>
+            <div class="lever-pct" style="color:var(--warning)">2–5%</div>
+          </div>
+          <div class="lever-item">
+            <div class="lever-icon">🌐</div>
+            <div class="lever-body"><strong>Egress reduction</strong> — architect to minimise inter-region and internet data transfer. Can be significant for data-heavy workloads</div>
+            <div class="lever-pct" style="color:var(--warning)">1–8%</div>
+          </div>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Make the pitch →</button>
+        </div>
+      </div>`;
+    setTimeout(updateROI, 0);
+
+  } else if (currentStep === 2) {
+    pitchAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 The Pitch — 170 pts</div>
+        <h2>The CFO pushes back: "Our engineers are already cost-conscious. What does a dedicated FinOps function add?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">This is the real objection. How do you respond?</p>
+        <div class="pitch-opts">
+          <button class="p-opt" onclick="answerPitch(0)">A: "Engineers who are cost-conscious but have no dedicated time will always deprioritise cost work against delivery deadlines."</button>
+          <button class="p-opt" onclick="answerPitch(1)">B: "Engineers optimise for delivery. FinOps creates the data, accountability structures, and organisational processes that make cost decisions systematic — not dependent on individual awareness."</button>
+          <button class="p-opt" onclick="answerPitch(2)">C: "Industry data shows 28–32% waste at most companies, so your engineers probably aren't as cost-conscious as you think."</button>
+          <button class="p-opt" onclick="answerPitch(3)">D: "Other companies our size all have FinOps teams, so we should too."</button>
+        </div>
+        <div id="pitch-fb" style="display:none" class="tip-card">
+          ✅ <strong>The systemic argument wins.</strong> Option A is partially true but defensive. Option C is a jab that puts the CFO in the position of defending the team. Option D is benchmarking without substance. Option B addresses the real question: individual cost-consciousness doesn't scale. Engineers do 100 things; FinOps does one. A FinOps function produces the unit cost metrics, tagging policies, budget amendment processes, and commitment purchase decisions that ad hoc cost awareness never consistently delivers. It's not about trust — it's about structure.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="pitch-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 170;
+    var badge = score >= 140 ? '🏆' : score >= 70 ? '🎯' : '📚';
+    var headline = score >= 140 ? 'FinOps advocate!' : score >= 70 ? 'Good case made!' : 'Build the argument!';
+    var desc = score >= 140 ? 'You made the systemic argument: individual awareness doesn\'t scale. FinOps creates the structure that makes cost decisions systematic.' : 'The strongest FinOps business case isn\'t about individual engineers being lazy — it\'s about building the organisational process that makes cost discipline systematic at scale.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>The ROI model for FinOps is straightforward: (Monthly spend × waste %) × capture rate − program cost. At $300K/month with 28% waste and 60% capture, a $15K/month FinOps investment nets $35K/month — 233% monthly ROI.</li>
+            <li>Industry studies (Flexera, Gartner) consistently put cloud waste at 28–32%. This is a useful benchmark for the "how much is recoverable?" question in the business case.</li>
+            <li>The strongest business case for FinOps isn't cost savings alone — it's the organisational capability: unit cost metrics, budget processes, and commitment strategy that ad hoc awareness never reliably delivers.</li>
+            <li>FinOps ROI compounds: savings in year 1 fund the program, and the capability built (tagging, budgeting, commitment discipline) prevents future waste from accumulating.</li>
+            <li>Realistic capture rates for year 1: 40–70% of identifiable waste. Don't promise 100% — implementation takes time, not all waste is easy to eliminate without product trade-offs.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

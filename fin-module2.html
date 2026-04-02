@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 2: Showback vs. Chargeback — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .alloc-table { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.85rem; }
+    .alloc-table th { background:#17172a; padding:9px 14px; text-align:left; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .alloc-table td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+    .alloc-table tr:last-child td { border-bottom:none; }
+    .alloc-table tr:hover td { background:rgba(108,71,255,0.04); }
+    .bu-tag { display:inline-block; padding:2px 10px; border-radius:20px; font-size:0.72rem; font-weight:700; }
+    .bu-a { background:rgba(108,71,255,0.15); color:#a78bfa; }
+    .bu-b { background:rgba(34,197,94,0.12); color:var(--success); }
+    .bu-c { background:rgba(245,158,11,0.12); color:var(--warning); }
+    .bu-shared { background:rgba(239,68,68,0.1); color:var(--danger); }
+
+    .model-toggle { display:flex; gap:10px; margin:14px 0; }
+    .model-btn { flex:1; padding:12px 16px; border-radius:12px; border:2px solid var(--border); background:var(--surface2); cursor:pointer; font-size:0.85rem; font-weight:600; transition:all 0.15s; text-align:center; }
+    .model-btn.active { border-color:var(--primary); background:rgba(108,71,255,0.1); color:var(--primary); }
+    .model-btn:hover:not(.active) { border-color:rgba(108,71,255,0.4); }
+
+    .model-panel { display:none; padding:16px; background:var(--surface2); border:1px solid var(--border); border-radius:12px; margin-bottom:14px; }
+    .model-panel.active { display:block; }
+
+    .implication-row { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .implication-row:last-child { border-bottom:none; }
+    .imp-icon { font-size:1.2rem; flex-shrink:0; margin-top:1px; }
+    .imp-text { font-size:0.84rem; line-height:1.6; }
+    .imp-text strong { color:var(--text); }
+
+    .vote-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
+    @media (max-width:500px) { .vote-grid { grid-template-columns:1fr; } }
+    .vote-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:16px; cursor:pointer; transition:all 0.15s; }
+    .vote-card:hover:not(.locked) { border-color:var(--primary); transform:translateY(-2px); }
+    .vote-card.locked { cursor:default; }
+    .vote-card.chosen { border-color:var(--primary); background:rgba(108,71,255,0.08); }
+    .vote-card.not-chosen { opacity:0.5; }
+    .vc-title { font-weight:800; font-size:0.9rem; margin-bottom:6px; }
+    .vc-pros { font-size:0.78rem; color:var(--success); margin-bottom:4px; }
+    .vc-cons { font-size:0.78rem; color:var(--danger); }
+    .vc-reveal { display:none; margin-top:10px; padding:10px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.78rem; line-height:1.6; color:var(--text-muted); }
+    .vote-card.chosen .vc-reveal,
+    .vote-card.not-chosen .vc-reveal { display:block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 2 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var modelView = 'showback';
+var voted = false;
+
+function switchModel(m) {
+  modelView = m;
+  document.querySelectorAll('.model-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.model === m);
+  });
+  document.querySelectorAll('.model-panel').forEach(function(p) {
+    p.classList.toggle('active', p.dataset.panel === m);
+  });
+}
+
+function castVote(idx) {
+  if (voted) return;
+  voted = true;
+  // idx: 0=showback, 1=chargeback, 2=hybrid, 3=nothing
+  var pts = [50, 50, 150, 0];
+  score += pts[idx];
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.vote-card').forEach(function(c, i) {
+    c.classList.add('locked');
+    if (i === idx) c.classList.add('chosen');
+    else c.classList.add('not-chosen');
+  });
+  document.getElementById('vote-fb').style.display = 'block';
+  document.getElementById('vote-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🔀 Cost Allocation</div>
+        <h2>The cloud bill arrives — who's responsible for it?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Most companies share cloud infrastructure across multiple teams or business units. When the bill arrives as one number, Finance has to decide: do we allocate these costs back to the teams, or do we keep it as a shared overhead?</p>
+        <div class="scenario-box">
+          <strong>Your situation:</strong> Three business units — Growth (marketing automation), Core (product platform), and Data (analytics pipelines) — all run workloads on a shared AWS account. Last month's total: <strong>$142,830</strong>. The CFO wants to know if these costs are being managed or if they're just growing invisibly.
+          <br><br>
+          Before we can answer that, you need to understand what allocation model you're operating under.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Explore the models →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔀 Allocation Models</div>
+        <h2>Showback vs. Chargeback — explore both</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">These are the two main approaches. Toggle between them to see how the same $142,830 bill is handled differently.</p>
+
+        <div class="model-toggle">
+          <div class="model-btn active" data-model="showback" onclick="switchModel('showback')">📊 Showback</div>
+          <div class="model-btn" data-model="chargeback" onclick="switchModel('chargeback')">💳 Chargeback</div>
+        </div>
+
+        <div class="model-panel active" data-panel="showback">
+          <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:10px">Showback — visibility without financial accountability</div>
+          <p style="font-size:0.84rem;color:var(--text-muted);margin-bottom:12px">Each team sees what they spent, but the costs stay in a central IT/Engineering cost center. No money moves between departments.</p>
+          <table class="alloc-table">
+            <thead><tr><th>Business Unit</th><th>Tagged Spend</th><th>Shown To</th><th>Charged To</th></tr></thead>
+            <tbody>
+              <tr><td><span class="bu-tag bu-a">Growth</span></td><td>$38,200</td><td>Growth lead</td><td>Central IT</td></tr>
+              <tr><td><span class="bu-tag bu-b">Core Platform</span></td><td>$72,100</td><td>Eng VP</td><td>Central IT</td></tr>
+              <tr><td><span class="bu-tag bu-c">Data & Analytics</span></td><td>$24,900</td><td>Data lead</td><td>Central IT</td></tr>
+              <tr><td><span class="bu-tag bu-shared">Untagged / Shared</span></td><td>$7,630</td><td>FinOps team</td><td>Central IT</td></tr>
+            </tbody>
+          </table>
+          <div class="implication-row"><div class="imp-icon">✅</div><div class="imp-text"><strong>Easy to implement</strong> — just requires cost tags and a reporting tool like AWS Cost Explorer or a FinOps platform</div></div>
+          <div class="implication-row"><div class="imp-icon">✅</div><div class="imp-text"><strong>No GL impact</strong> — Finance doesn't need intercompany billing, journal entries, or P&amp;L reclassification</div></div>
+          <div class="implication-row"><div class="imp-icon">⚠️</div><div class="imp-text"><strong>Soft accountability</strong> — teams see the number but there's no budget consequence if they overspend</div></div>
+          <div class="implication-row"><div class="imp-icon">⚠️</div><div class="imp-text"><strong>Depends on culture</strong> — only effective if team leads actually respond to the data they're shown</div></div>
+        </div>
+
+        <div class="model-panel" data-panel="chargeback">
+          <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:10px">Chargeback — costs actually transfer to business unit P&amp;Ls</div>
+          <p style="font-size:0.84rem;color:var(--text-muted);margin-bottom:12px">Each team is billed for their cloud usage. Costs move from the central IT budget to each BU's P&amp;L. Finance runs intercompany billing.</p>
+          <table class="alloc-table">
+            <thead><tr><th>Business Unit</th><th>Tagged Spend</th><th>Charged To BU P&amp;L</th><th>Remaining in IT</th></tr></thead>
+            <tbody>
+              <tr><td><span class="bu-tag bu-a">Growth</span></td><td>$38,200</td><td>$38,200</td><td>—</td></tr>
+              <tr><td><span class="bu-tag bu-b">Core Platform</span></td><td>$72,100</td><td>$72,100</td><td>—</td></tr>
+              <tr><td><span class="bu-tag bu-c">Data & Analytics</span></td><td>$24,900</td><td>$24,900</td><td>—</td></tr>
+              <tr><td><span class="bu-tag bu-shared">Untagged / Shared</span></td><td>$7,630</td><td>Split by rule*</td><td>—</td></tr>
+            </tbody>
+          </table>
+          <p style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">* Untagged spend allocation rules vary: proportional to tagged spend, equal split, or assigned to a specific cost center. Each approach has tradeoffs.</p>
+          <div class="implication-row"><div class="imp-icon">✅</div><div class="imp-text"><strong>Hard accountability</strong> — BU leads own their cloud cost line item and have budget consequences for overruns</div></div>
+          <div class="implication-row"><div class="imp-icon">✅</div><div class="imp-text"><strong>Accurate unit economics</strong> — each BU's profitability reflects true infrastructure cost</div></div>
+          <div class="implication-row"><div class="imp-icon">⚠️</div><div class="imp-text"><strong>Complex to implement</strong> — requires tagging discipline, allocation rules for shared services, and intercompany billing processes</div></div>
+          <div class="implication-row"><div class="imp-icon">⚠️</div><div class="imp-text"><strong>Political friction</strong> — teams may resist being charged for costs they feel they don't control (e.g., shared platform services)</div></div>
+          <div class="implication-row"><div class="imp-icon">⚠️</div><div class="imp-text"><strong>Untagged spend problem</strong> — if 20% of costs aren't tagged, the allocation is inaccurate no matter what rule you apply</div></div>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    voted = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🏢 Decision — up to 150 pts</div>
+        <h2>The CFO asks: "Which model should we use?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Context: You're 6 months into cloud adoption. Tag coverage is about 65%. The three BUs have different maturity levels — Core Platform has a dedicated SRE team, Growth doesn't. Finance currently has no intercompany billing process for cloud.</p>
+        <p style="color:var(--text-muted);margin-bottom:16px">What do you recommend?</p>
+        <div class="vote-grid">
+          <div class="vote-card" onclick="castVote(0)">
+            <div class="vc-title">📊 Start with showback</div>
+            <div class="vc-pros">+ Fast to implement, no GL impact, builds tagging habit</div>
+            <div class="vc-cons">− Soft accountability, teams may ignore the data</div>
+            <div class="vc-reveal">A reasonable starting point. Showback builds the visibility and tagging discipline needed for chargeback later. With 65% tag coverage, a chargeback model would have too many allocation disputes. The risk: if teams don't respond to showback data, costs stay invisible in practice even if technically reported.</div>
+          </div>
+          <div class="vote-card" onclick="castVote(1)">
+            <div class="vc-title">💳 Go straight to chargeback</div>
+            <div class="vc-pros">+ Hard accountability from day one</div>
+            <div class="vc-cons">− 35% untagged creates allocation disputes, no process exists</div>
+            <div class="vc-reveal">This is achievable but risky at 65% tag coverage. BU leads will dispute charges for untagged spend. Finance will need to define and defend allocation rules without the data to support them. A common outcome: chargeback is introduced, immediately disputed, and quietly abandoned. Tagging discipline usually needs to come first.</div>
+          </div>
+          <div class="vote-card" onclick="castVote(2)">
+            <div class="vc-title">🔀 Showback now, chargeback in 6 months</div>
+            <div class="vc-pros">+ Builds foundation, sets expectation of accountability</div>
+            <div class="vc-cons">− Requires tagging campaign and process work in parallel</div>
+            <div class="vc-reveal">This is a common and effective approach. Showback immediately creates visibility and motivates teams to fix tagging (because they can now see what they own). A defined migration date to chargeback gives teams a deadline to get their tagging right. Finance builds the intercompany billing process in parallel without urgency pressure.</div>
+          </div>
+          <div class="vote-card" onclick="castVote(3)">
+            <div class="vc-title">🚫 Neither — cloud is IT overhead</div>
+            <div class="vc-pros">+ No process overhead, no org friction</div>
+            <div class="vc-cons">− No accountability, costs grow invisibly</div>
+            <div class="vc-reveal">This is where most companies start — and where they stay until a bill spike forces a conversation. Cloud costs pooled as undifferentiated IT overhead mean no team has a reason to optimise. It's a valid short-term position if the bill is small, but it doesn't scale. The $142K/month bill in this scenario is a good signal that the conversation is overdue.</div>
+          </div>
+        </div>
+        <div id="vote-fb" style="display:none" class="tip-card">
+          There's no single "correct" allocation model — it depends on your organisation's maturity, tagging discipline, finance processes, and culture. The key insight: <strong>showback builds the foundation that chargeback requires</strong>. Jumping to chargeback with poor tag coverage creates allocation disputes that undermine trust in the entire FinOps function.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="vote-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 150;
+    var badge = score >= 130 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 130 ? 'Allocation-fluent!' : score >= 60 ? 'Good thinking!' : 'Key insight ahead';
+    var desc = score >= 130 ? 'You recognised that the path to chargeback runs through showback — and that 65% tag coverage isn\'t ready for hard billing disputes.' : 'The allocation model you choose shapes behaviour. Chargeback creates accountability; showback creates visibility. Most organisations need the latter before the former works.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Showback = visibility. Teams see their spend but aren't billed. No GL impact. Requires tagging, not intercompany billing.</li>
+            <li>Chargeback = accountability. Cloud costs move to BU P&amp;Ls. Requires tagging discipline, allocation rules for shared/untagged spend, and Finance process to run it.</li>
+            <li>Neither model works without tagging. A chargeback model with 35% untagged spend will generate more disputes than insights.</li>
+            <li>The hybrid path (showback → chargeback) is common: use showback to build tagging habit and visibility, then migrate to chargeback once coverage is high enough to defend the allocations.</li>
+            <li>Untagged spend needs a defined allocation rule even in showback: proportional to tagged spend, equal split, or absorbed centrally. Document it — teams will ask.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

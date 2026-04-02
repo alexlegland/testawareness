@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 1: Anatomy of the Cloud Invoice — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .invoice-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .invoice-block-header {
+      background: #17172a;
+      padding: 9px 16px;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .invoice-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .invoice-row:last-child { border-bottom: none; }
+    .invoice-row:hover:not(.revealed) { background: rgba(108,71,255,0.06); }
+    .invoice-row.revealed { cursor: default; }
+    .invoice-row .ir-label { font-size: 0.85rem; flex: 1; }
+    .invoice-row .ir-amount { font-weight: 700; font-size: 0.9rem; min-width: 90px; text-align: right; }
+    .invoice-row .ir-hint { font-size: 0.7rem; color: var(--primary); font-weight: 600; white-space: nowrap; }
+    .invoice-row.revealed .ir-hint { display: none; }
+    .invoice-explain {
+      display: none;
+      padding: 10px 16px 12px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,0.15);
+    }
+    .invoice-row.revealed + .invoice-explain { display: block; }
+    .invoice-row.total { background: rgba(0,0,0,0.2); cursor: default; }
+    .invoice-row.total .ir-label { font-weight: 700; color: var(--text); }
+    .invoice-row.total .ir-amount { color: var(--accent); font-size: 1rem; }
+    .invoice-row.credit .ir-amount { color: var(--success); }
+    .invoice-row.support { background: rgba(245,158,11,0.04); }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 14px 0;
+    }
+    @media (max-width: 500px) { .compare-grid { grid-template-columns: 1fr; } }
+    .cmp-col {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .cmp-label { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+    .cmp-label.trad { color: var(--text-muted); }
+    .cmp-label.cloud { color: var(--primary); }
+    .cmp-item { font-size: 0.82rem; padding: 5px 0; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+    .cmp-item:last-child { border-bottom: none; }
+    .cmp-item strong { color: var(--text); }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Module 1 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var revealed = 0;
+var TOTAL_ROWS = 6;
+var quizAnswered = false;
+
+function revealRow(id) {
+  var row = document.getElementById('ir-' + id);
+  if (!row || row.classList.contains('revealed')) return;
+  row.classList.add('revealed');
+  revealed++;
+  if (revealed >= TOTAL_ROWS) {
+    document.getElementById('inv-next').disabled = false;
+  }
+}
+
+function answerQuiz(idx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  var correct = idx === 1;
+  if (correct) score += 130;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === 1) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('quiz-fb').style.display = 'block';
+  document.getElementById('quiz-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🧾 Cloud Invoice</div>
+        <h2>This invoice doesn't work like any invoice you've seen</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Traditional IT invoices are fixed: a server lease, a software licence, a support contract. The amount is agreed upfront and doesn't change month to month.</p>
+        <div class="compare-grid">
+          <div class="cmp-col">
+            <div class="cmp-label trad">Traditional IT Invoice</div>
+            <div class="cmp-item"><strong>Fixed monthly cost</strong> — same amount each month</div>
+            <div class="cmp-item"><strong>Agreed upfront</strong> — contract sets the price</div>
+            <div class="cmp-item"><strong>One line item</strong> per service or vendor</div>
+            <div class="cmp-item"><strong>Accrual-friendly</strong> — easy to forecast and book</div>
+            <div class="cmp-item"><strong>Annual or multi-year</strong> commitment typical</div>
+          </div>
+          <div class="cmp-col" style="border-color:rgba(108,71,255,0.3)">
+            <div class="cmp-label cloud">AWS / Cloud Invoice</div>
+            <div class="cmp-item"><strong>Usage-based</strong> — amount changes every month</div>
+            <div class="cmp-item"><strong>Hundreds of line items</strong> by service, region, usage type</div>
+            <div class="cmp-item"><strong>Credits and discounts</strong> appear as negative amounts</div>
+            <div class="cmp-item"><strong>Hard to forecast</strong> — varies with product usage</div>
+            <div class="cmp-item"><strong>Support tier</strong> billed separately as % of spend</div>
+          </div>
+        </div>
+        <div class="scenario-box">
+          In the next step you'll explore an annotated cloud invoice — click each line to understand what it represents and how it behaves differently from a traditional cost.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Open the invoice →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    revealed = 0;
+    var rows = [
+      { id:'ec2',  label:'Amazon EC2 — Compute (us-east-1)', amount:'$61,400.00', explain:'Charged per instance-hour. Price varies by instance type, OS, and tenancy. A t3.medium is ~$0.042/hr; an r5.2xlarge is ~$0.504/hr. Unlike a server lease, you pay only for hours the instance is running — but if nobody terminates test instances, they run forever.' },
+      { id:'rds',  label:'Amazon RDS — Database instances', amount:'$28,600.00', explain:'Charged per instance-hour plus storage per GB-month plus I/O requests. Multi-AZ configurations (two instances for high availability) cost roughly 2× a single instance. RDS costs can grow silently as storage auto-scales.' },
+      { id:'s3',   label:'Amazon S3 — Storage & requests', amount:'$19,200.00', explain:'Two components: storage ($0.023/GB/month for Standard tier) plus request costs ($0.0004 per 1,000 GET requests). A bucket that\'s never cleaned up grows indefinitely. 1TB at Standard tier = $23.55/month.' },
+      { id:'sp',   label:'Compute Savings Plan (1-year, no upfront)', amount:'-$18,720.00', cls:'credit', explain:'A committed hourly spend in exchange for a discount (here ~36% off on-demand). Appears as a negative line item — a credit applied to eligible EC2, Lambda, and Fargate charges. This is not a payment; it\'s a discount already reflected in the total.' },
+      { id:'sup',  label:'AWS Business Support (10% of eligible charges)', amount:'$11,048.00', cls:'support', explain:'AWS Support plans are charged as a percentage of monthly spend. Business Support is 10% on the first $10K, 7% on the next $80K, etc. At this spend level it\'s a significant line — and it\'s on the invoice separately from the services it supports.' },
+      { id:'tax',  label:'VAT / Tax (varies by jurisdiction)', amount:'$8,302.00', explain:'Cloud invoices include tax calculated at point of billing, which varies by your registered entity location and the services used. Some services are taxed differently. Finance teams need to confirm the tax treatment with their jurisdiction — cloud tax compliance is a growing area.' }
+    ];
+
+    var rowsHTML = rows.map(function(r) {
+      return '<div class="invoice-row' + (r.cls ? ' ' + r.cls : '') + '" id="ir-' + r.id + '" onclick="revealRow(\'' + r.id + '\')">' +
+        '<span class="ir-label">' + r.label + '</span>' +
+        '<span class="ir-amount">' + r.amount + '</span>' +
+        '<span class="ir-hint">Click to understand →</span>' +
+      '</div>' +
+      '<div class="invoice-explain">' + r.explain + '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🧾 Invoice Explorer</div>
+        <h2>This month's AWS invoice — $142,800</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">Click each line to understand how it's calculated and what makes it behave differently from a traditional cost.</p>
+        <div class="invoice-block">
+          <div class="invoice-block-header"><span>AWS Invoice — October 2025</span><span>6 key lines shown</span></div>
+          ${rowsHTML}
+          <div class="invoice-row total">
+            <span class="ir-label">Total Due</span>
+            <span class="ir-amount">$142,830.00</span>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Click all 6 lines to continue</span>
+          <button class="btn btn-primary" id="inv-next" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 130 pts</div>
+        <h2>The CFO asks: "Why was last month's bill $12K higher than the month before?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Engineering says nothing changed. Finance needs to find the answer. Where do you look first?</p>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQuiz(0)">A: Compare total invoice amounts and escalate to Engineering to explain the difference</button>
+          <button class="q-opt" onclick="answerQuiz(1)">B: Use AWS Cost Explorer to break down the change by service, then by usage type within the highest-variance service</button>
+          <button class="q-opt" onclick="answerQuiz(2)">C: Check whether the Savings Plan discount changed — a reduced discount would explain a higher bill</button>
+          <button class="q-opt" onclick="answerQuiz(3)">D: Review the support tier charge — it scales with spend, so a higher bill means higher support costs</button>
+        </div>
+        <div id="quiz-fb" style="display:none" class="tip-card">
+          ✅ <strong>Cost Explorer is the right tool.</strong> The invoice total tells you the number but not the cause. Cost Explorer lets you drill: total → by service → by usage type → by resource. Most billing surprises come from a specific usage type within one service (e.g. "DataTransfer-Out-Bytes" within EC2, not EC2 overall). Escalating to Engineering without data is slower and less productive than arriving with a specific service and date range already isolated.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="quiz-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 130;
+    var badge = score >= 100 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 100 ? 'Invoice-literate!' : score >= 60 ? 'Good start!' : 'Keep building!';
+    var desc = score >= 100 ? 'You know how each line on the cloud invoice behaves — and where to look when the number changes unexpectedly.' : 'The key habit: never accept a cloud invoice as a black box. Every line has a driver, and Cost Explorer shows you which one moved.';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Cloud invoices are usage-based — the amount changes every month based on what ran, for how long, in which region.</li>
+            <li>Savings Plans appear as negative line items (credits), not as reduced service prices. The gross service charges are the full on-demand rate; the discount is applied separately.</li>
+            <li>AWS Support is charged as a percentage of eligible spend — it scales automatically as your bill grows. Factor it into budget models.</li>
+            <li>The invoice total is a symptom. AWS Cost Explorer is the diagnostic tool — drill by service, then usage type, then resource ID to find the driver of any variance.</li>
+            <li>Cloud costs accrue daily and are visible in near-real time. Finance doesn't have to wait for month-end to spot anomalies — set up weekly cost reports.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

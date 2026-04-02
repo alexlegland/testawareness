@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 2: Data Transfer — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Architecture diagram */
+    .arch-diagram {
+      background: #0b0b18;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 16px;
+      margin: 14px 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .arch-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+    .arch-node {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+      min-width: 90px;
+      position: relative;
+      transition: border-color 0.15s;
+    }
+    .arch-arrow { font-size: 0.9rem; color: var(--text-muted); flex-shrink: 0; }
+    .arch-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .arch-link:hover:not(.open) { border-color: var(--accent); transform: scale(1.03); }
+    .arch-link.open { border-color: var(--accent); background: rgba(255,107,53,0.1); color: var(--accent); cursor: default; }
+    .arch-link.free { border-color: rgba(34,197,94,0.4); color: var(--success); }
+    .arch-link.free.open { background: rgba(34,197,94,0.08); cursor: default; }
+    .cost-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-red    { background: var(--danger); }
+    .dot-orange { background: var(--accent); }
+    .dot-green  { background: var(--success); }
+    .dot-yellow { background: var(--warning); }
+
+    .flow-panel { display: none; padding: 14px 16px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border); font-size: 0.82rem; line-height: 1.6; color: var(--text-muted); }
+    .flow-panel.visible { display: block; }
+    .flow-price { font-size: 1.1rem; font-weight: 900; color: var(--accent); }
+    .flow-fix   { margin-top: 8px; padding: 8px 12px; background: rgba(108,71,255,0.08); border-radius: 8px; font-size: 0.78rem; color: var(--primary); }
+
+    .tally-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 10px 0; }
+    .tally-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.84rem; border-bottom: 1px solid var(--border); }
+    .tally-row:last-child { border-bottom: none; font-weight: 800; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 2 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var flowsFound = 0;
+var FLOW_TOTAL = 6;
+var quizAnswered = false;
+
+var flows = [
+  {
+    id: 'internet-out',
+    label: '🌐 EC2 → Internet',
+    dotClass: 'dot-red',
+    costClass: '',
+    price: '$0.09/GB',
+    monthly: '~$180/mo',
+    explain: 'Internet egress (EC2 → internet): AWS charges $0.09/GB for the first 10 TB/month. At 2 TB/month of API responses to users, that\'s $180/mo. This is the most expensive transfer type.',
+    fix: '💡 Fix: Put CloudFront in front. CloudFront → origin pull is cheap ($0.0085/GB); CloudFront → viewer egress is $0.0085–$0.012/GB depending on region — and cached responses reduce origin traffic entirely.'
+  },
+  {
+    id: 'cross-az',
+    label: '↕️ EC2 ↔ RDS (cross-AZ)',
+    dotClass: 'dot-orange',
+    costClass: '',
+    price: '$0.01/GB each way',
+    monthly: '~$60/mo',
+    explain: 'Cross-AZ traffic: $0.01/GB in each direction. If your EC2 instances are in AZ-a and your RDS is in AZ-b (common when Multi-AZ puts the standby in a different AZ, and load shifts), every query and result crosses AZs. At 3 TB of query traffic/month: $30 in + $30 out = $60/mo.',
+    fix: '💡 Fix: Pin app instances to the same AZ as the primary RDS. When RDS fails over, re-pin. Or use RDS Proxy to pool connections and reduce round-trips.'
+  },
+  {
+    id: 'nat',
+    label: '🔀 Private subnet → NAT Gateway',
+    dotClass: 'dot-red',
+    costClass: '',
+    price: '$0.045/hr + $0.045/GB',
+    monthly: '~$160/mo',
+    explain: 'NAT Gateway: $0.045/hr fixed ($32.40/mo) + $0.045/GB processed. If your Lambda functions or containers in private subnets make API calls to the internet (analytics, third-party APIs, S3 through NAT), every GB costs $0.045. At 2.8 TB/mo: $32 fixed + $126 processing = $158/mo.',
+    fix: '💡 Fix: Use VPC Endpoints for AWS services (S3, DynamoDB, SQS) — free data processing. Move non-sensitive Lambda to public subnet if it only needs outbound internet, not private network access. Or use a proxy in the public subnet instead of NAT Gateway.'
+  },
+  {
+    id: 'inter-region',
+    label: '🌍 us-east-1 → eu-west-1 replication',
+    dotClass: 'dot-red',
+    costClass: '',
+    price: '$0.02/GB',
+    monthly: '~$245/mo',
+    explain: 'Inter-region data transfer: $0.02/GB. If you\'re replicating a database or S3 bucket cross-region (backup, disaster recovery, EU data locality), and replicating 12 TB/month, that\'s $245/mo in transfer alone — before the compute and storage costs in the destination region.',
+    fix: '💡 Fix: Compress data before replication. Use S3 Replication Time Control only if SLA requires it. Consider whether full replication is needed vs. replication of just changed data. For S3, S3 Replication charges $0.015/1K objects replicated — add that cost too.'
+  },
+  {
+    id: 'cloudfront',
+    label: '☁️ CloudFront → Viewers',
+    dotClass: 'dot-yellow',
+    costClass: '',
+    price: '$0.0085/GB (first 10 TB)',
+    monthly: '~$85/mo (10 TB)',
+    explain: 'CloudFront egress to viewers: $0.0085/GB for first 10 TB/month (us-east pricing). This is about 10× cheaper than EC2 direct egress ($0.09/GB). Serving 10 TB/month of static assets via CloudFront costs $85 vs. $900 direct from EC2.',
+    fix: '💡 Not a fix — this IS the fix. Serving content via CloudFront instead of directly from EC2 or S3 is how you reduce the $0.09/GB internet egress cost. CloudFront also has a free tier: 1 TB/month of data transfer out is free.'
+  },
+  {
+    id: 'same-az',
+    label: '✅ EC2 ↔ EC2 (same AZ)',
+    dotClass: 'dot-green',
+    costClass: 'free',
+    price: 'FREE',
+    monthly: '$0',
+    explain: 'Traffic between EC2 instances (or EC2 to RDS, ElastiCache, etc.) within the same Availability Zone using private IP addresses is free. This is an important design principle: colocate components that talk to each other in the same AZ to avoid cross-AZ charges.',
+    fix: '💡 Architecture principle: for high-bandwidth internal communication (app ↔ cache, app ↔ DB), keep components in the same AZ. Use multiple AZs for redundancy, but route traffic within each AZ where possible.'
+  }
+];
+
+function openFlow(id) {
+  var item = document.getElementById('flow-' + id);
+  if (!item || item.classList.contains('open')) return;
+  item.classList.add('open');
+  document.getElementById('panel-' + id).classList.add('visible');
+  flowsFound++;
+  if (flowsFound >= FLOW_TOTAL) {
+    document.getElementById('flow-next').disabled = false;
+  }
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">🌐 Data Transfer</div>
+        <h2>The hidden tax on every byte that moves</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">EC2 instances, Lambda functions, RDS databases — you budget for compute and storage. But data transfer costs often aren't modelled at design time and can double the bill once traffic scales.</p>
+        <div class="scenario-box">
+          <strong>AWS data transfer pricing (us-east-1):</strong><br>
+          — Internet egress (EC2/S3 → internet): <strong>$0.09/GB</strong> (first 10 TB/mo)<br>
+          — Between Availability Zones: <strong>$0.01/GB each direction</strong><br>
+          — Between AWS Regions: <strong>$0.02/GB</strong><br>
+          — NAT Gateway processing: <strong>$0.045/GB</strong> + $0.045/hr<br>
+          — Within same AZ (private IP): <strong>FREE</strong><br>
+          — CloudFront → viewers: <strong>$0.0085/GB</strong> (first 10 TB/mo)
+        </div>
+        <p style="color:var(--text-muted);font-size:0.85rem">In the next step, you'll annotate an architecture diagram to find where these costs are accumulating.</p>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Open the diagram →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    flowsFound = 0;
+    var flowHtml = flows.map(function(f) {
+      return `<div class="arch-link ${f.dotClass === 'dot-green' ? 'free' : ''}" id="flow-${f.id}" onclick="openFlow('${f.id}')">
+        <span class="cost-dot ${f.dotClass}"></span>${f.label} — <strong style="color:var(--accent)">${f.price}</strong>
+      </div>
+      <div class="flow-panel" id="panel-${f.id}">
+        <div style="margin-bottom:6px"><span class="flow-price">${f.monthly}</span> estimated monthly</div>
+        <div>${f.explain}</div>
+        <div class="flow-fix">${f.fix}</div>
+      </div>`;
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🌐 Egress Annotator</div>
+        <h2>Click each data flow to reveal its cost</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">A typical 3-tier web app with multi-AZ RDS, NAT Gateway, and cross-region replication. Six flows — some expensive, one free.</p>
+
+        <div class="arch-diagram">
+          <div class="arch-row"><div class="arch-node" style="border-color:var(--primary)">🌐 Internet / Users</div></div>
+          <div class="arch-row"><div class="arch-node">☁️ CloudFront</div><div class="arch-node" style="border-color:var(--danger)">🔀 NAT Gateway</div></div>
+          <div class="arch-row"><div class="arch-node" style="border-color:var(--warning)">⚖️ ALB</div></div>
+          <div class="arch-row">
+            <div class="arch-node">EC2 AZ-a</div>
+            <div class="arch-arrow">↔</div>
+            <div class="arch-node">EC2 AZ-b</div>
+          </div>
+          <div class="arch-row">
+            <div class="arch-node" style="border-color:var(--success)">RDS Primary<br><small>AZ-a</small></div>
+            <div class="arch-arrow">→</div>
+            <div class="arch-node" style="border-color:var(--text-muted)">RDS Standby<br><small>AZ-b</small></div>
+          </div>
+          <div class="arch-row"><div class="arch-node" style="border-color:var(--accent)">S3 / eu-west-1<br><small>replication target</small></div></div>
+        </div>
+
+        <div style="margin: 4px 0 12px; font-size:0.78rem; color:var(--text-muted)">🔴 expensive &nbsp;&nbsp; 🟠 moderate &nbsp;&nbsp; 🟡 cheap (vs. alternatives) &nbsp;&nbsp; 🟢 free</div>
+        <div style="display:flex;flex-direction:column;gap:6px">${flowHtml}</div>
+
+        <div class="step-actions" style="margin-top:16px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 6 flows to continue</span>
+          <button class="btn btn-primary" id="flow-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 160 pts</div>
+        <h2>A Lambda function in a private subnet makes 50,000 calls/day to an S3 bucket in the same region. Each response is 100 KB. What's the cheapest architecture change?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Current setup: Lambda (private subnet) → NAT Gateway → S3 public endpoint. Monthly data processed: ~150 GB.</p>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0, false, 0, 2)">A: Move Lambda to a public subnet so it bypasses the NAT Gateway</button>
+          <button class="q-opt" onclick="answerQ(1, false, 0, 2)">B: Use S3 Transfer Acceleration to reduce the transfer cost</button>
+          <button class="q-opt" onclick="answerQ(2, true, 160, 2)">C: Create a VPC Gateway Endpoint for S3 — traffic routes privately, no NAT Gateway charges</button>
+          <button class="q-opt" onclick="answerQ(3, false, 0, 2)">D: Cache the S3 objects in ElastiCache to reduce call volume</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>VPC Gateway Endpoint for S3 (and DynamoDB) is free.</strong> It creates a private route from your VPC to S3 that bypasses the NAT Gateway entirely — zero data processing charge. At 150 GB/month through NAT Gateway, you're paying $6.75/month in processing + $32.40/month fixed = ~$39/month. The Gateway Endpoint eliminates the processing charge. Option A would work but removes the private network isolation. Option D solves a different problem. S3 Transfer Acceleration makes uploads faster (not cheaper) and actually costs more.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 160;
+    var badge = score >= 130 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 130 ? 'Egress-aware architect!' : score >= 60 ? 'Good instincts!' : 'Revisit the flows!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Data transfer is often the fastest-growing and least-understood cost in a cloud bill. It's invisible at design time and compounds with traffic growth.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Internet egress ($0.09/GB) is the most expensive transfer type. Serve user-facing content via CloudFront ($0.0085/GB) to reduce it by ~10×.</li>
+            <li>Cross-AZ traffic is $0.01/GB each direction. Collocating app + DB in the same AZ for primary traffic avoids this — but you still want multi-AZ for failover.</li>
+            <li>NAT Gateway costs $0.045/hr + $0.045/GB processed. For AWS service calls (S3, DynamoDB, SQS), use VPC Endpoints instead — Gateway Endpoints are free, Interface Endpoints cost $0.01/hr + $0.01/GB.</li>
+            <li>Traffic within the same AZ on private IP is free. Design internal communication to stay within an AZ.</li>
+            <li>Inter-region transfer ($0.02/GB) adds up fast for replication-heavy architectures. Compress before replicating; replicate only what needs to be replicated.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module3.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 6: Data & AI Feature Costs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .price-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin: 14px 0; }
+    .price-table th { background: var(--surface2); color: var(--text-muted); padding: 8px 14px; text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .price-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .price-table tr:last-child td { border-bottom: none; }
+    .price-table .model-name { font-weight: 700; }
+    .price-table .price-in  { color: var(--text-muted); }
+    .price-table .price-out { color: var(--accent); font-weight: 600; }
+
+    .calc-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .calc-block h4 { font-size: 0.88rem; font-weight: 700; margin-bottom: 10px; }
+    .calc-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 0.84rem; border-bottom: 1px solid var(--border); }
+    .calc-row:last-child { border-bottom: none; font-weight: 700; font-size: 0.95rem; }
+    .calc-row .r-label { color: var(--text-muted); }
+    .calc-row .r-val   { font-weight: 600; }
+    .calc-row.total .r-val { color: var(--accent); font-size: 1rem; }
+
+    .scenario-toggle { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+    .stoggle {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 99px;
+      padding: 6px 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .stoggle.active { border-color: var(--primary); background: rgba(108,71,255,0.12); color: var(--primary); }
+
+    .approach-cards { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+    .approach-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .approach-card:hover:not(.locked) { border-color: var(--primary); }
+    .approach-card.locked  { cursor: default; }
+    .approach-card.chosen.good { border-color: var(--success); background: rgba(34,197,94,0.06); }
+    .approach-card.chosen.ok   { border-color: var(--warning); background: rgba(245,158,11,0.06); }
+    .approach-card.chosen.bad  { border-color: var(--danger);  background: rgba(239,68,68,0.06); }
+    .ac-title  { font-weight: 700; font-size: 0.92rem; margin-bottom: 4px; }
+    .ac-sub    { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0; }
+    .ac-result { display: none; margin-top: 10px; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; line-height: 1.6; background: rgba(0,0,0,0.2); }
+    .approach-card.chosen .ac-result { display: block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 6 of 7</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var activeScenario = 0;
+var decisionMade = false;
+
+/* cost scenarios for the calculator */
+var scenarios = [
+  {
+    label: '1K users/day',
+    calls: 1000,
+    tokensIn: 500,
+    tokensOut: 300,
+    models: [
+      { name: 'GPT-4o',               priceIn: 2.50,  priceOut: 10.00 },
+      { name: 'Claude Sonnet 4',       priceIn: 3.00,  priceOut: 15.00 },
+      { name: 'GPT-4o mini',           priceIn: 0.15,  priceOut: 0.60  },
+      { name: 'Claude Haiku 4.5',      priceIn: 0.80,  priceOut: 4.00  },
+      { name: 'Gemini 1.5 Flash',      priceIn: 0.075, priceOut: 0.30  }
+    ]
+  },
+  {
+    label: '10K users/day',
+    calls: 10000,
+    tokensIn: 500,
+    tokensOut: 300,
+    models: null /* reuse same models */
+  },
+  {
+    label: '100K users/day',
+    calls: 100000,
+    tokensIn: 500,
+    tokensOut: 300,
+    models: null
+  }
+];
+
+var baseModels = scenarios[0].models;
+
+function monthlyCost(priceIn, priceOut, calls, tokensIn, tokensOut) {
+  var dailyCost = (calls * tokensIn / 1e6) * priceIn + (calls * tokensOut / 1e6) * priceOut;
+  return dailyCost * 30;
+}
+
+function renderCalc() {
+  var s = scenarios[activeScenario];
+  var calls = s.calls;
+  var tin   = s.tokensIn;
+  var tout  = s.tokensOut;
+
+  var rows = baseModels.map(function(m) {
+    var cost = monthlyCost(m.priceIn, m.priceOut, calls, tin, tout);
+    var costStr = cost < 1 ? '$' + cost.toFixed(2) : cost < 1000 ? '$' + Math.round(cost) : '$' + (cost/1000).toFixed(1) + 'K';
+    return '<tr><td class="model-name">' + m.name + '</td>' +
+      '<td class="price-in">$' + m.priceIn.toFixed(3) + '</td>' +
+      '<td class="price-out">$' + m.priceOut.toFixed(2) + '</td>' +
+      '<td style="font-weight:700;color:var(--accent)">' + costStr + '/mo</td></tr>';
+  }).join('');
+
+  document.getElementById('calc-table-body').innerHTML = rows;
+  document.getElementById('calc-scenario-label').textContent = calls.toLocaleString() + ' calls/day · ' + tin + ' tokens in / ' + tout + ' tokens out avg';
+}
+
+function switchScenario(idx) {
+  activeScenario = idx;
+  document.querySelectorAll('.stoggle').forEach(function(b, i) {
+    b.classList.toggle('active', i === idx);
+  });
+  renderCalc();
+}
+
+function chooseApproach(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var outcomes = ['good', 'ok', 'bad'];
+  var pts      = [170,    85,   0  ];
+  score += pts[idx];
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.approach-card').forEach(function(c) { c.classList.add('locked'); });
+  var card = document.getElementById('approach-' + idx);
+  card.classList.add('chosen', outcomes[idx]);
+  document.getElementById('dec-next-btn').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🤖 AI Feature Costs</div>
+        <h2>"Just add an AI feature" — what does that actually mean for the bill?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          AI features are increasingly common on roadmaps. But "call the AI API" hides a wide range of cost models depending on which model, how many tokens, and at what scale.
+        </p>
+
+        <div class="scenario-box">
+          The CPO wants to add <strong>AI-generated summaries</strong> to your product. Each time a user opens a document, the product calls an LLM API to generate a short summary. Simple feature. But before it goes on the roadmap, you need to know what it costs.
+          <br><br>
+          In the next step you'll calculate the monthly cost for different models and usage levels. Then you'll make a build decision.
+        </div>
+
+        <div class="tip-card">
+          💡 <strong>How LLM API pricing works:</strong> You pay per token — roughly per word. Prices are quoted per 1 million tokens, separately for input (what you send) and output (what the model returns). Output tokens cost more than input tokens on every major model.
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the numbers →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    activeScenario = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🧮 Cost Calculator</div>
+        <h2>AI summary feature — monthly API cost</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          Each summary call: ~500 tokens in (document text), ~300 tokens out (summary). Switch scale to see cost change.
+        </p>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:14px">Prices are approximate and change frequently — always verify on provider pricing pages before making decisions.</p>
+
+        <div class="scenario-toggle">
+          <button class="stoggle active" onclick="switchScenario(0)">1K users/day</button>
+          <button class="stoggle" onclick="switchScenario(1)">10K users/day</button>
+          <button class="stoggle" onclick="switchScenario(2)">100K users/day</button>
+        </div>
+
+        <p id="calc-scenario-label" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px"></p>
+
+        <table class="price-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>$/1M in</th>
+              <th>$/1M out</th>
+              <th>Monthly cost</th>
+            </tr>
+          </thead>
+          <tbody id="calc-table-body"></tbody>
+        </table>
+
+        <div class="tip-card">
+          <strong>What this shows:</strong>
+          <ul>
+            <li>At 1K users/day, even the most expensive models cost under $200/mo — often fine to absorb.</li>
+            <li>At 100K users/day, top-tier models hit $5K–$20K+/mo. Model choice becomes a business decision.</li>
+            <li>A cheaper model (Haiku, Flash, mini) can cost 20–50× less for the same feature. Quality tradeoff varies by task.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">Make the call →</button>
+        </div>
+      </div>`;
+
+    setTimeout(renderCalc, 0);
+
+  } else if (currentStep === 2) {
+    decisionMade = false;
+    var approaches = [
+      {
+        title: '① Start with a smaller model, upgrade if quality isn\'t good enough',
+        sub: 'Ship with GPT-4o mini or Haiku. Benchmark quality. Upgrade only if needed.',
+        outcome: 'good',
+        result: 'This is a sound approach for most AI features. Smaller models are surprisingly capable for structured tasks like summarisation. At 10K DAU, starting with a smaller model saves $3–15K/month vs. top-tier. If quality is insufficient you have real usage data to justify the upgrade — not just speculation.'
+      },
+      {
+        title: '② Ship with the best model to ensure quality, optimise cost later',
+        sub: 'Use GPT-4o or Claude Sonnet. Premium quality from day one.',
+        outcome: 'ok',
+        result: '"Optimise later" often means never. At 10K DAU, a top-tier model for summarisation can cost $5–10K/month. That\'s real margin impact. The risk isn\'t using a premium model — it\'s committing to it before knowing whether users value the quality difference enough to justify it. Some tasks genuinely need top-tier models; routine summarisation often doesn\'t.'
+      },
+      {
+        title: '③ Build your own summarisation model to avoid API costs entirely',
+        sub: 'Train or fine-tune an open-source model internally.',
+        outcome: 'bad',
+        result: 'Training and hosting your own model involves ML infrastructure, GPU compute ($1–5K/month for inference alone), engineering time to maintain it, and ongoing retraining. This is rarely cheaper than API pricing until you\'re at very high scale (millions of calls/day) — and it adds significant operational complexity. API costs are predictable and scale-free; self-hosted models are a different kind of cost.'
+      }
+    ];
+
+    var cards = approaches.map(function(a, i) {
+      return '<div class="approach-card" id="approach-' + i + '" onclick="chooseApproach(' + i + ')">' +
+        '<div class="ac-title">' + a.title + '</div>' +
+        '<div class="ac-sub">' + a.sub + '</div>' +
+        '<div class="ac-result">' + a.result + '</div>' +
+        '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎯 Decision — up to 170 pts</div>
+        <h2>The CPO asks: "How do we approach the model choice?"</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          Your product has 10K DAU. The AI summary feature is approved for Q3. What do you recommend?
+        </p>
+        <div class="approach-cards">${cards}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Pick the approach you'd recommend</span>
+          <button class="btn btn-primary" id="dec-next-btn" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 170;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'AI-cost-aware PM!'; desc = 'You know that model choice is a cost decision, not just a quality one — and that starting small with data beats committing to expensive models upfront.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'Quality matters, but so does cost trajectory. The key habit: benchmark cheaper models before assuming you need the expensive one.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Self-hosted models feel cheaper but rarely are at typical SaaS scale. API pricing is predictable and requires zero infra investment — worth understanding before ruling it out.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>LLM API cost = (input tokens × input price + output tokens × output price) × calls. Both sides of the equation matter.</li>
+            <li>A 20–50× cost difference exists between small and large models for the same task. Quality gap varies — often smaller than expected for structured tasks like summarisation.</li>
+            <li>At 1K users/day even expensive models are cheap. At 100K users/day model choice is a major budget decision.</li>
+            <li>Output tokens cost more than input tokens on every major API. Long responses are disproportionately expensive.</li>
+            <li>Prompt length matters: every token in your system prompt is paid for on every single call. Bloated prompts compound at scale.</li>
+            <li>Self-hosted models are rarely cheaper than API pricing below millions of calls/day — they add GPU infra, maintenance, and retraining overhead.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

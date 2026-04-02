@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 7: Lambda Memory Tuning — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .mem-slider-row { display:flex; align-items:center; gap:14px; padding:12px 0; border-bottom:1px solid var(--border); }
+    .mem-slider-row:last-child { border-bottom:none; }
+    .msr-label { flex:1; font-size:0.85rem; }
+    .msr-label span { display:block; font-size:0.7rem; color:var(--text-muted); margin-top:2px; }
+    .msr-slider { width:130px; accent-color:var(--primary); }
+    .msr-val { min-width:90px; text-align:right; font-weight:700; font-size:0.85rem; color:var(--accent); }
+
+    .result-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:12px 0; }
+    @media(max-width:480px){ .result-grid{ grid-template-columns:1fr 1fr; } }
+    .rg-item { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; text-align:center; }
+    .rg-val  { font-size:1.3rem; font-weight:900; color:var(--accent); line-height:1; }
+    .rg-lbl  { font-size:0.68rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-top:4px; }
+    .rg-good { color:var(--success); }
+    .rg-bad  { color:var(--danger); }
+
+    .compare-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin:12px 0; }
+    .compare-table th { background:#17172a; padding:8px 14px; text-align:left; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .compare-table td { padding:9px 14px; border-bottom:1px solid var(--border); }
+    .compare-table tr:last-child td { border-bottom:none; }
+    .compare-table tr.winner td { background:rgba(34,197,94,0.05); }
+    .win-badge { display:inline-block; padding:1px 7px; border-radius:20px; font-size:0.68rem; font-weight:700; background:rgba(34,197,94,0.12); color:var(--success); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled) { border-color:var(--primary); }
+    .q-opt:disabled { cursor:default; }
+    .q-opt.correct { border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong   { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, quizAnswered=false;
+// Model state
+var memMB=128, durationMs=4200;
+
+function gbSec(mem, dur) { return (mem/1024) * (dur/1000); }
+function cost(mem, dur, reqs) {
+  var compute = gbSec(mem,dur) * 0.0000166667 * reqs;
+  var req = reqs * 0.0000002; // $0.20/1M
+  return compute + req;
+}
+function fmt$(n){ return n<0.01 ? '<$0.01' : '$'+n.toFixed(2); }
+
+function updateCalc() {
+  var reqs = 1000000; // 1M/month
+  var c128  = cost(128,  durationMs, reqs);
+  var c512  = cost(512,  Math.round(durationMs*0.55), reqs); // faster with more memory
+  var c1024 = cost(1024, Math.round(durationMs*0.32), reqs);
+  var c3008 = cost(3008, Math.round(durationMs*0.15), reqs);
+
+  document.getElementById('mem-val').textContent = memMB+' MB';
+  document.getElementById('dur-val').textContent = durationMs+' ms';
+
+  var curCost = cost(memMB, durationMs, reqs);
+  document.getElementById('res-cost').textContent = fmt$(curCost)+'/mo';
+  document.getElementById('res-gbsec').textContent = (gbSec(memMB,durationMs)*reqs/1e6).toFixed(2)+'M GB-sec';
+
+  // table
+  var rows = [
+    {mem:128,  dur:durationMs,                    c:c128,  note:'Default (often too low)'},
+    {mem:512,  dur:Math.round(durationMs*0.55),   c:c512,  note:''},
+    {mem:1024, dur:Math.round(durationMs*0.32),   c:c1024, note:''},
+    {mem:3008, dur:Math.round(durationMs*0.15),   c:c3008, note:'Max without custom config'}
+  ];
+  var minCost = Math.min(c128,c512,c1024,c3008);
+  var html = rows.map(function(r){
+    var winner = Math.abs(r.c - minCost) < 0.001;
+    return '<tr'+(winner?' class="winner"':'')+'><td>'+r.mem+' MB</td><td>~'+r.dur+' ms</td><td>'+fmt$(r.c)+'/mo</td><td>'+(winner?'<span class="win-badge">cheapest</span>':r.note)+'</td></tr>';
+  }).join('');
+  document.getElementById('cmp-body').innerHTML = html;
+}
+
+function setMem(v){ memMB=parseInt(v); updateCalc(); }
+function setDur(v){ durationMs=parseInt(v); updateCalc(); }
+
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">⚡ Lambda Pricing</div>
+        <h2>More memory can be cheaper. Seriously.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Lambda pricing has two components: request count and compute duration. Duration is measured in GB-seconds — memory × execution time. More memory speeds up execution. If the execution time drops faster than the memory increases, total GB-seconds goes down — and so does the bill.</p>
+        <div class="scenario-box">
+          <strong>Lambda pricing (us-east-1):</strong><br>
+          — Requests: $0.20 per 1M requests ($0.0000002 each)<br>
+          — Compute: $0.0000166667 per GB-second<br>
+          — Free tier: 1M requests + 400,000 GB-seconds/month<br><br>
+          <strong>Key insight:</strong> Lambda allocates CPU proportionally to memory. At 128 MB you get a fraction of a vCPU. At 1,769 MB you get exactly 1 full vCPU. At 3,008 MB you get nearly 2 vCPUs. This means computation-heavy functions run dramatically faster with more memory — sometimes so fast that total cost drops.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Try the calculator →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    memMB=128; durationMs=4200;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Memory Optimiser</div>
+        <h2>A CPU-bound function runs at 128 MB in 4,200 ms. Tune it.</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Adjust memory. Duration estimates update based on Lambda's CPU-proportional allocation. Find the cheapest configuration for 1M invocations/month.</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:12px 0">
+          <div class="mem-slider-row">
+            <div class="msr-label">Memory allocation<span>Lambda increments: 64 MB steps</span></div>
+            <input type="range" class="msr-slider" min="128" max="3008" step="64" value="128" oninput="setMem(this.value)">
+            <div class="msr-val" id="mem-val">128 MB</div>
+          </div>
+          <div class="mem-slider-row">
+            <div class="msr-label">Baseline duration at 128 MB<span>Represents your actual measured p50</span></div>
+            <input type="range" class="msr-slider" min="500" max="10000" step="100" value="4200" oninput="setDur(this.value)">
+            <div class="msr-val" id="dur-val">4200 ms</div>
+          </div>
+        </div>
+        <div class="result-grid">
+          <div class="rg-item"><div class="rg-val" id="res-cost">$0.00</div><div class="rg-lbl">Monthly cost (1M reqs)</div></div>
+          <div class="rg-item"><div class="rg-val" id="res-gbsec">0M</div><div class="rg-lbl">GB-seconds used</div></div>
+        </div>
+        <table class="compare-table" style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <thead><tr><th>Memory</th><th>Est. Duration</th><th>Monthly Cost</th><th>Notes</th></tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+        <p style="font-size:0.76rem;color:var(--text-muted);margin-top:4px">Duration estimates assume linear CPU scaling (conservative — real gains are often higher for CPU-bound work). Measure with AWS Lambda Power Tuning for exact results.</p>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Quiz →</button></div>
+      </div>`;
+    setTimeout(updateCalc,0);
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 150 pts</div>
+        <h2>A Lambda function processes images. At 512 MB it runs in 8,000 ms. A team member suggests doubling memory to 1,024 MB. Accounting says it'll double the cost. Who's right?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: Accounting — doubling memory doubles the GB-seconds, so cost doubles</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Neither — memory doesn't affect duration for image processing</button>
+          <button class="q-opt" onclick="answerQ(2,true,150,2)">C: The team member is likely right — more CPU means faster processing; if duration halves, GB-seconds stay the same and cost is neutral; if it drops more, cost actually falls</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Accounting is right for CPU-bound work but wrong for I/O-bound work</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Doubling memory doubles the CPU allocation, which roughly halves duration for CPU-bound work.</strong> GB-seconds = (1024/1024) × (4000/1000) = 4 GB-sec per invocation — identical to (512/1024) × (8000/1000) = 4 GB-sec. So cost stays the same but the function is twice as fast. For image processing (CPU-bound) you often get super-linear gains — going from 512 MB to 1024 MB may cut duration by more than half, making it genuinely cheaper. Use the open-source <strong>AWS Lambda Power Tuning</strong> step function to measure this empirically on your actual function.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=120?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=120?'Lambda-optimised!':score>=60?'Good instincts!':'Worth revisiting!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/150</span></div>
+        <p>Lambda's GB-second pricing model means memory and cost don't scale linearly. For CPU-bound functions, more memory is often free — or cheaper.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Lambda bills GB-seconds: (memory GB) × (duration seconds) × $0.0000166667. Doubling memory that halves duration = same cost, double the speed.</li>
+          <li>CPU scales proportionally with memory. At 1,769 MB you get 1 full vCPU. CPU-bound functions can see 60–80% duration reduction going from 128 MB to 1,024 MB.</li>
+          <li>I/O-bound functions (waiting on network, DB) don't benefit — more CPU doesn't help if you're blocked waiting. More memory just costs more.</li>
+          <li>Use <strong>AWS Lambda Power Tuning</strong> (open-source Step Functions state machine) to automatically test 10+ memory configurations against your real function and find the cost-optimal setting.</li>
+          <li>Don't set memory by feel. The default 128 MB was chosen for simplicity, not performance or cost efficiency. Measure it.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="dev-module12.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

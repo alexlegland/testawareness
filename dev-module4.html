@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 4: IaC Cost Review — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .diff-file {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.82rem;
+    }
+    .diff-file-header {
+      background: #161b22;
+      padding: 8px 16px;
+      font-size: 0.75rem;
+      color: #8b949e;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diff-hunk { border-top: 1px solid #30363d; }
+    .diff-hunk-header {
+      background: #0d1d3b;
+      color: #58a6ff;
+      padding: 4px 16px;
+      font-size: 0.75rem;
+    }
+    .diff-line {
+      display: flex;
+      align-items: flex-start;
+      padding: 2px 0;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .diff-line.add    { background: rgba(46,160,67,0.12); }
+    .diff-line.remove { background: rgba(248,81,73,0.12); }
+    .diff-line.ctx    { background: transparent; cursor: default; }
+    .diff-line:not(.ctx):not(.locked):hover { filter: brightness(1.4); }
+    .diff-line.flagged.add    { background: rgba(46,160,67,0.35); outline: 2px solid rgba(46,160,67,0.6); }
+    .diff-line.flagged.remove { background: rgba(248,81,73,0.35);  outline: 2px solid rgba(248,81,73,0.6); }
+    .diff-line .ln { width: 40px; text-align: right; padding: 0 10px; color: #484f58; flex-shrink: 0; font-size: 0.75rem; user-select: none; }
+    .diff-line .sign { width: 18px; flex-shrink: 0; }
+    .diff-line.add    .sign { color: #3fb950; }
+    .diff-line.remove .sign { color: #f85149; }
+    .diff-line .code { flex: 1; padding: 0 8px 0 0; color: #c9d1d9; white-space: pre; }
+    .diff-line.add    .code { color: #aff5b4; }
+    .diff-line.remove .code { color: #ffa198; }
+    .flag-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(245,158,11,0.2);
+      color: var(--warning);
+      border: 1px solid rgba(245,158,11,0.4);
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .diff-line.flagged .flag-btn { opacity: 1; }
+
+    .review-result {
+      background: var(--surface2);
+      border-left: 3px solid var(--border);
+      border-radius: 0 10px 10px 0;
+      padding: 12px 16px;
+      margin: 8px 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      display: none;
+    }
+    .review-result.show { display: block; }
+    .review-result.hit  { border-color: var(--danger); }
+    .review-result.miss { border-color: var(--text-muted); }
+    .review-result.safe { border-color: var(--success); }
+    .rv-label { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+    .rv-label.hit  { color: var(--danger); }
+    .rv-label.miss { color: var(--text-muted); }
+    .rv-label.safe { color: var(--success); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Dev · Module 4 of 8</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+
+/* Each change block: id, lines, isCostly, cost description, flagged by user */
+var changes = [
+  {
+    id: 'ec2-type',
+    label: 'EC2 instance_type change',
+    costly: true,
+    costLabel: '💸 HIGH COST',
+    flagged: false,
+    points: 50,
+    impact: '$31/mo → $374/mo. r5.2xlarge is a memory-optimised instance (64GB RAM) costing 12× more than t3.medium. If this is for a dev/staging environment, this is almost certainly wrong. If it\'s for production, the reason should be in the PR description.',
+    lines: [
+      { type: 'ctx',    ln: 12, code: 'resource "aws_instance" "app_server" {' },
+      { type: 'remove', ln: 13, code: '  instance_type = "t3.medium"' },
+      { type: 'add',    ln: 13, code: '  instance_type = "r5.2xlarge"' },
+      { type: 'ctx',    ln: 14, code: '  ami           = data.aws_ami.ubuntu.id' },
+    ]
+  },
+  {
+    id: 'rds-multiaz',
+    label: 'RDS multi_az change',
+    costly: true,
+    costLabel: '💸 HIGH COST',
+    flagged: false,
+    points: 50,
+    impact: 'Enabling multi_az doubles the RDS instance cost by running a standby replica in a second AZ. For a db.t3.medium this adds ~$55/mo. For larger instances the delta is much higher. Worth it for production — not for staging.',
+    lines: [
+      { type: 'ctx',    ln: 28, code: 'resource "aws_db_instance" "primary" {' },
+      { type: 'ctx',    ln: 29, code: '  instance_class    = "db.t3.medium"' },
+      { type: 'remove', ln: 30, code: '  multi_az          = false' },
+      { type: 'add',    ln: 30, code: '  multi_az          = true' },
+    ]
+  },
+  {
+    id: 's3-lifecycle',
+    label: 'S3 lifecycle rule removal',
+    costly: true,
+    costLabel: '💸 GROWING COST',
+    flagged: false,
+    points: 50,
+    impact: 'Removing the lifecycle rule means objects in this bucket will never transition to cheaper storage tiers or expire. If the bucket grows at its current rate (~200GB/month), you\'re adding ~$4.60/month every month with no end. At S3 Standard pricing ($0.023/GB), 1TB = $23/mo.',
+    lines: [
+      { type: 'ctx',    ln: 44, code: 'resource "aws_s3_bucket" "uploads" {' },
+      { type: 'ctx',    ln: 45, code: '  bucket = "prod-user-uploads"' },
+      { type: 'remove', ln: 46, code: '  lifecycle_rule {' },
+      { type: 'remove', ln: 47, code: '    enabled = true' },
+      { type: 'remove', ln: 48, code: '    transition { days = 90; storage_class = "STANDARD_IA" }' },
+      { type: 'remove', ln: 49, code: '  }' },
+      { type: 'ctx',    ln: 50, code: '}' },
+    ]
+  },
+  {
+    id: 'deletion-protection',
+    label: 'deletion_protection added',
+    costly: false,
+    costLabel: '✅ NO COST IMPACT',
+    flagged: false,
+    points: 0,
+    impact: 'Adding deletion_protection = true prevents accidental RDS deletion. This is a safety change with no cost impact. Good practice for production databases.',
+    lines: [
+      { type: 'ctx',    ln: 31, code: '  instance_class       = "db.t3.medium"' },
+      { type: 'add',    ln: 32, code: '  deletion_protection  = true' },
+      { type: 'ctx',    ln: 33, code: '  skip_final_snapshot  = false' },
+    ]
+  },
+  {
+    id: 'tags',
+    label: 'Tags added to resources',
+    costly: false,
+    costLabel: '✅ NO COST IMPACT',
+    flagged: false,
+    points: 0,
+    impact: 'Tags have no cost. Adding team, env, and feature tags is good FinOps practice — it enables cost attribution later. This is the right change.',
+    lines: [
+      { type: 'ctx',    ln: 60, code: 'resource "aws_instance" "worker" {' },
+      { type: 'add',    ln: 61, code: '  tags = {' },
+      { type: 'add',    ln: 62, code: '    team    = "platform"' },
+      { type: 'add',    ln: 63, code: '    env     = "prod"' },
+      { type: 'add',    ln: 64, code: '    feature = "background-jobs"' },
+      { type: 'add',    ln: 65, code: '  }' },
+    ]
+  },
+  {
+    id: 'var',
+    label: 'Variable default value change',
+    costly: false,
+    costLabel: '✅ NO COST IMPACT',
+    flagged: false,
+    points: 0,
+    impact: 'Changing a variable default from "staging" to "production" is a configuration change. Cost impact depends entirely on what that variable controls — but this line alone carries no direct cost.',
+    lines: [
+      { type: 'ctx',    ln: 72, code: 'variable "environment" {' },
+      { type: 'remove', ln: 73, code: '  default = "staging"' },
+      { type: 'add',    ln: 73, code: '  default = "production"' },
+      { type: 'ctx',    ln: 74, code: '}' },
+    ]
+  }
+];
+
+var submitted = false;
+
+function toggleFlag(changeId) {
+  if (submitted) return;
+  var ch = changes.find(function(c) { return c.id === changeId; });
+  if (!ch) return;
+  ch.flagged = !ch.flagged;
+  var els = document.querySelectorAll('[data-change="' + changeId + '"]');
+  els.forEach(function(el) {
+    el.classList.toggle('flagged', ch.flagged);
+  });
+  updateFlagCount();
+}
+
+function updateFlagCount() {
+  var n = changes.filter(function(c) { return c.flagged; }).length;
+  var btn = document.getElementById('submit-review-btn');
+  if (btn) btn.textContent = 'Submit review' + (n > 0 ? ' (' + n + ' flagged)' : '');
+}
+
+function submitReview() {
+  if (submitted) return;
+  submitted = true;
+
+  changes.forEach(function(ch) {
+    var pts = 0;
+    var cls, labelCls, msg;
+    if (ch.costly && ch.flagged) {
+      pts = ch.points;
+      cls = 'hit'; labelCls = 'hit'; msg = '⚠️ Flagged correctly. ' + ch.impact;
+    } else if (ch.costly && !ch.flagged) {
+      cls = 'miss'; labelCls = 'miss'; msg = '❌ Missed. ' + ch.impact;
+    } else if (!ch.costly && ch.flagged) {
+      pts = -10;
+      cls = 'miss'; labelCls = 'miss'; msg = '⚠️ False positive. ' + ch.impact;
+    } else {
+      cls = 'safe'; labelCls = 'safe'; msg = ch.impact;
+    }
+    score = Math.max(0, score + pts);
+
+    var rv = document.getElementById('rv-' + ch.id);
+    if (rv) {
+      rv.className = 'review-result show ' + cls;
+      rv.innerHTML = '<div class="rv-label ' + labelCls + '">' + ch.costLabel + '</div>' + msg;
+    }
+  });
+
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  var btn = document.getElementById('submit-review-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Review submitted'; }
+  document.getElementById('diff-next-btn').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📝 PR Review</div>
+        <h2>Spot the expensive changes before they ship</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          A teammate opened a Terraform PR. It touches 6 resource configurations. Some changes are cost-neutral. Others will significantly increase the monthly bill.
+        </p>
+        <div class="scenario-box">
+          Your job: review the diff and <strong>click to flag any change you think has a meaningful cost impact</strong>. You don't need to block the PR — just surface what needs discussion before it merges.
+        </div>
+        <div class="tip-card">
+          💡 Click on changed lines (green additions, red removals) to flag them. Context lines (white) aren't clickable.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Open the diff →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    submitted = false;
+    changes.forEach(function(c) { c.flagged = false; });
+
+    var diffHTML = changes.map(function(ch) {
+      var linesHTML = ch.lines.map(function(line, li) {
+        var clickable = line.type !== 'ctx';
+        var flagBtn = clickable ? '<span class="flag-btn">⚑ flagged</span>' : '';
+        return '<div class="diff-line ' + line.type + (clickable ? '' : '') + '" ' +
+          (clickable ? 'data-change="' + ch.id + '" onclick="toggleFlag(\'' + ch.id + '\')"' : '') + '>' +
+          '<span class="ln">' + line.ln + '</span>' +
+          '<span class="sign">' + (line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' ') + '</span>' +
+          '<span class="code">' + line.code.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' +
+          flagBtn +
+          '</div>';
+      }).join('');
+
+      return '<div class="diff-hunk">' +
+        '<div class="diff-hunk-header">@@ ' + ch.label + ' @@</div>' +
+        linesHTML +
+        '<div class="review-result" id="rv-' + ch.id + '"></div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card" style="padding:0;overflow:hidden">
+        <div style="padding:20px 24px 12px">
+          <div class="step-type challenge">📝 Terraform PR Diff</div>
+          <h2 style="margin-bottom:4px">infrastructure/main.tf — 6 changes</h2>
+          <p style="color:var(--text-muted);font-size:0.85rem">Click changed lines (+ / −) to flag cost concerns. Submit when done.</p>
+        </div>
+        <div class="diff-file">
+          <div class="diff-file-header">📄 infrastructure/main.tf</div>
+          ${diffHTML}
+        </div>
+        <div style="padding:0 24px 20px" class="step-actions">
+          <button class="btn btn-ghost" id="submit-review-btn" onclick="submitReview()">Submit review</button>
+          <button class="btn btn-primary" id="diff-next-btn" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 150;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 80)     { badge = '🏆'; headline = 'Cost-aware reviewer!'; desc = 'You caught the expensive changes before they shipped. That\'s the whole point of cost review as part of the PR process.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'You caught some of the cost issues. The key patterns: instance type changes, multi_az toggles, and lifecycle rule removals are the highest-impact Terraform changes to watch.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'The three expensive changes: instance type upgrade (12×), multi_az (2×), and removing lifecycle rules (unbounded growth). These are the patterns to watch in every infrastructure PR.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li><strong>Instance type changes</strong> are the easiest cost issue to miss — the line looks small but r5.2xlarge costs 12× more than t3.medium.</li>
+            <li><strong>multi_az = true</strong> doubles your RDS cost. Right for production, wasteful for staging.</li>
+            <li><strong>Removing lifecycle rules</strong> is a silent cost increase — data grows forever at standard rates.</li>
+            <li>Tags and deletion_protection are free. Don't flag them as cost concerns.</li>
+            <li>Most teams add cost review as part of the PR checklist alongside security review — it takes 2 minutes and prevents multi-thousand dollar mistakes.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

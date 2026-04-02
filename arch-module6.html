@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 6: Architecture Review — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .arch-review-item {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin: 10px 0;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .arch-review-item:hover:not(.flagged):not(.locked) { border-color: var(--accent); transform: translateY(-2px); }
+    .arch-review-item.flagged { border-color: var(--accent); background: rgba(255,107,53,0.06); cursor: default; }
+    .arch-review-item.locked  { cursor: default; }
+    .arch-review-item.correct-flag { border-color: var(--success); background: rgba(34,197,94,0.06); }
+    .arch-review-item.false-alarm  { border-color: var(--danger);  background: rgba(239,68,68,0.06); }
+    .ari-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .ari-label  { font-weight: 800; font-size: 0.9rem; flex: 1; }
+    .ari-spec   { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+    .ari-flag   { font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; flex-shrink: 0; }
+    .flag-open  { background: rgba(255,107,53,0.1); color: var(--accent); border: 1px solid rgba(255,107,53,0.3); }
+    .flag-found { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+    .flag-false { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+    .ari-reveal { display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.8rem; line-height: 1.65; color: var(--text-muted); }
+    .ari-reveal.show { display: block; }
+    .savings-tag { font-weight: 800; color: var(--success); }
+
+    .review-status { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--surface2); border-radius: 10px; margin: 10px 0; font-size: 0.82rem; }
+    .rs-count { font-weight: 800; font-size: 1.1rem; color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 6 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var flagged = 0;
+var REAL_ISSUES = 5;
+var FALSE_ALARMS = 3;
+var reviewDone = false;
+var allItems = [];
+
+// items: correct = true means it IS a cost issue worth flagging
+var items = [
+  {
+    id: 0,
+    label: 'EC2 — m5.4xlarge, 4 instances, us-east-1',
+    spec: 'Running a Node.js API. CloudWatch shows: avg CPU 9%, max CPU 28%, memory 6 GB / 64 GB. On-demand pricing, no Savings Plans.',
+    correct: true,
+    explain: '🚨 Over-provisioned + no commitment. m5.4xlarge (16 vCPU, 64 GB RAM) at $0.768/hr = $553/mo per instance. CPU peaks at 28% — these could be m5.xlarge (4 vCPU, 16 GB) at $0.192/hr, saving $576/hr = $414/mo per instance, $1,656/mo across 4. Additionally, zero Savings Plan coverage means paying full on-demand rates. Flagging both right-sizing and commitment gap here is correct.',
+    savings: '~$1,800/mo potential saving (right-size + Savings Plan)'
+  },
+  {
+    id: 1,
+    label: 'S3 — "prod-media-bucket", 82 TB, Standard tier',
+    spec: 'Object access logs show: 94% of objects not accessed in >90 days. Lifecycle policy: none configured.',
+    correct: true,
+    explain: '🚨 Missing lifecycle policy for cold objects. S3 Standard: $0.023/GB = $0.023 × 82,000 GB = $1,886/mo. S3 Intelligent-Tiering or Glacier Instant Retrieval would cost $0.004–$0.023/GB depending on access pattern. For objects with 94% not accessed in 90 days, Glacier Instant Retrieval at $0.004/GB would cost $328/mo — saving $1,558/mo. A lifecycle rule to transition to S3-IA after 30 days and Glacier after 90 days is a standard and reversible change.',
+    savings: '~$1,200–$1,500/mo potential saving (lifecycle tiers)'
+  },
+  {
+    id: 2,
+    label: 'RDS — db.r5.2xlarge Multi-AZ, us-east-1',
+    spec: 'PostgreSQL 15. CPU avg 12%, peak 31%. Memory used 24 GB / 64 GB. Read traffic handled by 2 Read Replicas. No Reserved Instance.',
+    correct: true,
+    explain: '🚨 Two issues: (1) right-sizing opportunity — 64 GB RAM used 24 GB, db.r5.xlarge (32 GB) may be sufficient with some headroom. (2) No Reserved Instance on a clearly stable production DB. RDS Multi-AZ db.r5.2xlarge on-demand: $1.008/hr = $726/mo. Reserved 1yr no-upfront: $0.627/hr = $451/mo — saving $275/mo with zero architecture change. Check if the Read Replicas are correctly sized too; they often mirror the primary unnecessarily.',
+    savings: '~$275–$450/mo (RI + right-size primary)'
+  },
+  {
+    id: 3,
+    label: 'NAT Gateway — 3 AZs, each processing ~4 TB/month',
+    spec: 'Private subnet. Traffic goes: Lambda/ECS tasks → NAT Gateway → Internet (third-party APIs, S3, SSM). $0.045/hr fixed × 3 + $0.045/GB × 12 TB.',
+    correct: true,
+    explain: '🚨 VPC Endpoint candidates. $0.045/hr × 3 × 720hr = $97/mo fixed. $0.045/GB × 12,000 GB = $540/mo processing. Total: $637/mo. Check what traffic is going through the NAT: S3 calls → S3 Gateway Endpoint (free). SSM calls → SSM Interface Endpoint ($0.01/hr + $0.01/GB — much cheaper). For remaining internet-bound traffic, evaluate if services can be moved to public subnets or if a smaller NAT Gateway setup suffices. Potential saving: $300–$500/mo by eliminating S3 and SSM from NAT traffic.',
+    savings: '~$300–$500/mo (VPC Endpoints for AWS services)'
+  },
+  {
+    id: 4,
+    label: 'CloudFront distribution — 45 TB/month egress',
+    spec: 'Serving static assets (images, JS, CSS). Cache hit ratio: 94%. Origin: S3. Price class: All Edge Locations (including South America, Australia).',
+    correct: false,
+    explain: '✅ This is actually well-optimised. A 94% cache hit ratio is excellent — it means only 6% of requests go back to origin (S3). CloudFront at $0.0085–$0.012/GB is far cheaper than serving directly from S3 with $0.09/GB internet egress. The "All Edge Locations" price class adds cost for South America/Australia but enables low-latency for global users — a reasonable trade-off if you have global traffic. Flagging this as wasteful would be incorrect without evidence that the edge locations aren\'t used.',
+    savings: 'No action recommended'
+  },
+  {
+    id: 5,
+    label: 'ECS Fargate — 200 tasks, 0.5 vCPU / 1 GB each, 24/7',
+    spec: 'Microservices platform. Average CPU utilisation across tasks: 4%. P95 CPU: 18%. Tasks have been at these counts for 6+ months.',
+    correct: true,
+    explain: '🚨 Severely over-provisioned Fargate fleet with no Fargate Savings Plans. 200 tasks × 0.5 vCPU × $0.04048/hr × 720hr = $2,915/mo (compute). 200 tasks × 1 GB × $0.004445/hr × 720hr = $641/mo (memory). Total: $3,556/mo. At 4% avg CPU, many tasks could be halved to 0.25 vCPU. Also, Fargate Savings Plans give 1-year discounts of 20–30%. Combining right-sizing and Savings Plans: potential saving of $1,500–$2,000/mo.',
+    savings: '~$1,500–$2,000/mo (right-size + Fargate Savings Plan)'
+  },
+  {
+    id: 6,
+    label: 'Kinesis Data Streams — 20 shards, 2 TB/month',
+    spec: 'Processing application events. Average shard utilisation: 80%. Retention: 24 hours (default). On-demand mode not used.',
+    correct: false,
+    explain: '✅ This looks well-configured. 80% shard utilisation is healthy — Kinesis shards have a capacity of 1 MB/sec inbound and 2 MB/sec outbound. Running at 80% with provisioned shards (vs. on-demand) is more cost-efficient for predictable workloads. Default 24-hour retention is appropriate if downstream consumers process within that window. Kinesis on-demand mode costs 2× more per shard-hour than provisioned for predictable workloads — staying on provisioned is correct here.',
+    savings: 'No action recommended'
+  },
+  {
+    id: 7,
+    label: 'DynamoDB — "sessions" table, 800 WCU / 2000 RCU provisioned',
+    spec: 'User session storage. CloudWatch shows: consumed WCU avg 42/sec (vs 800 provisioned), consumed RCU avg 120/sec (vs 2000 provisioned). On-demand mode not used.',
+    correct: false,
+    explain: '✅ Wait — this actually IS an issue, but not a simple fix. Provisioned capacity at 5% WCU utilisation (42/800) and 6% RCU utilisation (120/2000) means you\'re paying for 94% unused capacity. On-demand DynamoDB would auto-scale and you\'d pay $1.25/million write request units and $0.25/million read request units. Compare: current provisioned cost vs. on-demand cost at actual consumed rates. However, DynamoDB Auto Scaling (not on-demand mode) can also right-size provisioned capacity while keeping consistent latency. This was marked as a borderline case — if you flagged it, that\'s defensible.',
+    savings: 'Potentially $200–400/mo with Auto Scaling or on-demand'
+  }
+];
+
+function flagItem(id) {
+  if (reviewDone) return;
+  var item = items.find(function(x){ return x.id === id; });
+  if (!item) return;
+  var el = document.getElementById('item-' + id);
+  if (el.classList.contains('flagged') || el.classList.contains('locked')) return;
+
+  el.classList.add('flagged');
+  document.getElementById('reveal-' + id).classList.add('show');
+
+  if (item.correct) {
+    el.classList.add('correct-flag');
+    document.getElementById('flag-badge-' + id).textContent = '✅ Issue found';
+    document.getElementById('flag-badge-' + id).className = 'ari-flag flag-found';
+    score += 30;
+    flagged++;
+  } else {
+    el.classList.add('false-alarm');
+    document.getElementById('flag-badge-' + id).textContent = '⚠️ False alarm';
+    document.getElementById('flag-badge-' + id).className = 'ari-flag flag-false';
+    score -= 10;
+    if (score < 0) score = 0;
+    flagged++;
+  }
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.getElementById('flagged-count').textContent = flagged;
+
+  if (flagged >= items.length) {
+    reviewDone = true;
+    document.getElementById('review-next').disabled = false;
+  } else if (flagged >= REAL_ISSUES) {
+    document.getElementById('review-next').disabled = false;
+  }
+}
+
+function revealAll() {
+  reviewDone = true;
+  items.forEach(function(item) {
+    var el = document.getElementById('item-' + item.id);
+    if (!el.classList.contains('flagged')) {
+      el.classList.add('locked');
+      document.getElementById('reveal-' + item.id).classList.add('show');
+      if (item.correct) {
+        el.style.borderColor = 'rgba(245,158,11,0.4)';
+        document.getElementById('flag-badge-' + item.id).textContent = '⚠️ Missed';
+        document.getElementById('flag-badge-' + item.id).className = 'ari-flag flag-false';
+      } else {
+        el.style.borderColor = 'rgba(34,197,94,0.25)';
+        document.getElementById('flag-badge-' + item.id).textContent = '✅ Correctly skipped';
+        document.getElementById('flag-badge-' + item.id).className = 'ari-flag flag-found';
+      }
+    }
+  });
+  document.getElementById('review-next').disabled = false;
+  document.getElementById('reveal-all-btn').style.display = 'none';
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🔎 Architecture Review</div>
+        <h2>Every architecture has a cost review hiding in it</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">You've been asked to do a cost review of a production system before the Q2 budget meeting. You have 8 architecture components in front of you — some have cost problems, some are correctly configured. Your job is to find the real issues without flagging things that are fine.</p>
+        <div class="scenario-box">
+          <strong>Rules:</strong><br>
+          — Click a component to flag it as a cost concern (+30 pts if real issue)<br>
+          — False alarms cost you points (−10 pts)<br>
+          — You can reveal all answers at any time<br>
+          — 5 real issues are hidden among 8 components<br><br>
+          Use the specs and utilisation data to decide — not just "it looks expensive."
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Start the review →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    flagged = 0; reviewDone = false;
+    var itemsHtml = items.map(function(item) {
+      return `
+        <div class="arch-review-item" id="item-${item.id}" onclick="flagItem(${item.id})">
+          <div class="ari-header">
+            <div>
+              <div class="ari-label">${item.label}</div>
+              <div class="ari-spec">${item.spec}</div>
+            </div>
+            <div class="ari-flag flag-open" id="flag-badge-${item.id}">Click to flag →</div>
+          </div>
+          <div class="ari-reveal" id="reveal-${item.id}">
+            ${item.explain}
+            ${item.correct ? '<div style="margin-top:6px"><span class="savings-tag">💰 ' + item.savings + '</span></div>' : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔎 Architecture Review — 30 pts each (−10 false alarm)</div>
+        <h2>Flag the real cost issues</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">8 components. 5 have real cost problems. Click to flag; click "Reveal All" when done.</p>
+        <div class="review-status">
+          <span>Flagged: <span class="rs-count" id="flagged-count">0</span> / 8</span>
+          <span style="font-size:0.8rem;color:var(--text-muted)">5 real issues to find</span>
+        </div>
+        ${itemsHtml}
+        <div class="step-actions" style="margin-top:14px">
+          <button class="btn btn-ghost" id="reveal-all-btn" onclick="revealAll()">Reveal All</button>
+          <button class="btn btn-primary" id="review-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 180;
+    var badge = score >= 140 ? '🏆' : score >= 80 ? '🎯' : '📚';
+    var headline = score >= 140 ? 'Sharp reviewer!' : score >= 80 ? 'Good eye!' : 'Keep building!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>The highest-value architecture reviews find over-provisioned compute, missing lifecycle policies, and commitment gaps — not just "expensive-looking" services.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Over-provisioning is the most common issue: EC2/RDS/Fargate sized for theoretical peak rather than actual utilisation. CloudWatch metrics (avg CPU, memory used) tell the real story.</li>
+            <li>Missing S3 lifecycle policies are free to fix and often save hundreds to thousands per month. Objects not accessed in 90+ days belong in a cheaper storage tier.</li>
+            <li>No Reserved pricing on stable managed services (RDS, ElastiCache) is a pure cost gap — zero architecture change required, just a purchase decision.</li>
+            <li>NAT Gateway charges ($0.045/GB processed) can be dramatically reduced by routing AWS service traffic (S3, DynamoDB, SSM) through VPC Endpoints instead.</li>
+            <li>High cache hit ratio on CloudFront, correct Kinesis shard utilisation, and well-sized databases are not issues — don't flag things that are working correctly.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

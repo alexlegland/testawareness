@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 11: Spot Instance Strategies — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .spot-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0; }
+    @media(max-width:500px){ .spot-grid{ grid-template-columns:1fr; } }
+    .sg-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+    .sg-title { font-weight:800; font-size:0.82rem; margin-bottom:8px; }
+    .sg-row { font-size:0.76rem; padding:3px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; }
+    .sg-row:last-child { border-bottom:none; }
+    .sg-val { font-weight:700; }
+    .sg-val.green { color:var(--success); }
+    .sg-val.red { color:var(--danger); }
+    .sg-val.yellow { color:var(--warning); }
+
+    .workload-classify { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .wl-row { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; }
+    .wl-title { font-weight:700; font-size:0.88rem; margin-bottom:6px; }
+    .wl-desc { font-size:0.76rem; color:var(--text-muted); margin-bottom:9px; }
+    .wl-btns { display:flex; gap:6px; flex-wrap:wrap; }
+    .wl-btn { padding:6px 13px; border-radius:8px; border:2px solid var(--border); background:transparent; cursor:pointer; font-size:0.78rem; font-weight:600; transition:all 0.15s; }
+    .wl-btn:hover:not(:disabled){ border-color:var(--primary); }
+    .wl-btn:disabled{ cursor:default; }
+    .wl-btn.correct{ border-color:var(--success); background:rgba(34,197,94,0.1); color:var(--success); }
+    .wl-btn.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+    .wl-fb { display:none; margin-top:8px; font-size:0.78rem; color:var(--text-muted); line-height:1.55; padding:7px 10px; background:rgba(34,197,94,0.05); border-radius:7px; border:1px solid rgba(34,197,94,0.2); }
+
+    .strategy-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .str-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .str-card:hover:not(.open){ border-color:var(--success); }
+    .str-card.open{ border-color:rgba(34,197,94,0.35); cursor:default; }
+    .sc-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .sc-icon { font-size:1.1rem; }
+    .sc-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .sc-save { font-size:0.72rem; font-weight:700; padding:2px 9px; border-radius:20px; background:rgba(34,197,94,0.12); color:var(--success); border:1px solid rgba(34,197,94,0.2); }
+    .sc-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .str-card.open .sc-body { display:block; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0;
+var wlAnswered=[false,false,false,false];
+var WL_CORRECT=[1,0,2,1]; // indices into labels
+var WL_LABELS=['On-Demand','Spot','On-Demand + Spot mix'];
+var WL_EXPLAIN=[
+  'On-Demand only. Payment processing is latency-sensitive, stateful (each transaction has state that cannot be interrupted mid-flight), and customer-facing. An interruption mid-transaction causes data integrity issues and poor UX. Spot is never appropriate for transactions that cannot be gracefully interrupted and checkpointed.',
+  'Spot is ideal. Nightly ML training jobs are: batch (can be restarted from checkpoint), time-insensitive (runs overnight), and stateless between epochs (checkpointed to S3). Spot interruption = resume from last checkpoint. Typical Spot discount on GPU instances (p3, g4): 60–75% off on-demand. A p3.2xlarge ($3.06/hr on-demand) costs ~$0.92/hr on Spot = $2.14/hr saved per training job.',
+  'On-Demand + Spot mix (capacity-optimised). Web serving requires minimum capacity at all times (on-demand baseline) but can scale horizontally using Spot for burst traffic. Pattern: set ASG minimum = 2 on-demand (baseline SLA), configure mixed instances policy with 60–80% Spot for scale-out. If Spot is interrupted, scale-in to on-demand baseline. Karpenter and EC2 Auto Scaling both support this natively.',
+  'Spot is ideal, with checkpointing. Video transcoding is: CPU/GPU intensive (high Spot discount), parallelisable (each segment independent), and resumable (pick up from last segment on interruption). Standard approach: split video into segments, transcode each segment independently via SQS queue. Spot interruption completes the current segment (2-minute interruption notice), SQS message reappears after visibility timeout, another Spot instance picks it up. No work lost beyond the current segment.'
+];
+var strOpened=0, STR_TOTAL=4;
+
+function answerWL(wlIdx, chosen){
+  if(wlAnswered[wlIdx])return;
+  wlAnswered[wlIdx]=true;
+  var correct=(chosen===WL_CORRECT[wlIdx]);
+  if(correct) score+=35;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('#wl-'+wlIdx+' .wl-btn').forEach(function(b,i){
+    b.disabled=true;
+    if(i===WL_CORRECT[wlIdx]) b.classList.add('correct');
+    else if(i===chosen&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('wl-fb-'+wlIdx).style.display='block';
+  if(wlAnswered.every(function(v){return v;})) document.getElementById('wl-next').disabled=false;
+}
+function openStr(id){
+  var el=document.getElementById('str-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); strOpened++;
+  if(strOpened>=STR_TOTAL) document.getElementById('str-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">⚡ Spot Instances</div>
+        <h2>Spot gives you up to 90% off — with a 2-minute eviction notice</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Spot Instances use AWS's spare EC2 capacity at dramatically reduced prices. When AWS needs the capacity back, they give you a 2-minute interruption notice, then terminate the instance. That constraint sounds limiting — but for the right workloads, it's irrelevant. The key is designing for interruption rather than hoping it doesn't happen.</p>
+        <div class="spot-grid">
+          <div class="sg-card">
+            <div class="sg-title">💰 Typical Spot discounts</div>
+            <div class="sg-row"><span>c5.xlarge</span><span class="sg-val green">~70% off</span></div>
+            <div class="sg-row"><span>m5.2xlarge</span><span class="sg-val green">~65% off</span></div>
+            <div class="sg-row"><span>r5.4xlarge</span><span class="sg-val green">~72% off</span></div>
+            <div class="sg-row"><span>p3.2xlarge (GPU)</span><span class="sg-val green">~70% off</span></div>
+            <div class="sg-row"><span>g4dn.xlarge (GPU)</span><span class="sg-val green">~60% off</span></div>
+          </div>
+          <div class="sg-card">
+            <div class="sg-title">📊 Interruption frequency (approx)</div>
+            <div class="sg-row"><span>c5 family</span><span class="sg-val green">&lt;5% / month</span></div>
+            <div class="sg-row"><span>m5 family</span><span class="sg-val green">&lt;5% / month</span></div>
+            <div class="sg-row"><span>r5 family</span><span class="sg-val yellow">5–10% / month</span></div>
+            <div class="sg-row"><span>Smaller instances (&lt;4 vCPU)</span><span class="sg-val yellow">higher variance</span></div>
+            <div class="sg-row"><span>Using 5+ instance types</span><span class="sg-val green">interruption risk ↓↓</span></div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Classify workloads →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    wlAnswered=[false,false,false,false];
+    var workloads=[
+      { title:'Payment processing API — stateful transactions, customer-facing, SLA &lt;200ms', desc:'Cannot tolerate mid-transaction interruption' },
+      { title:'Nightly ML model training — GPU-intensive, checkpoints to S3 every epoch, 4-hour job', desc:'Time window: 10pm–6am, no customer impact' },
+      { title:'Web application servers — stateless HTTP handlers, ALB in front, horizontal scale', desc:'Minimum 2 instances required for HA' },
+      { title:'Video transcoding pipeline — SQS-driven, each job = one video segment, 3–8 min each', desc:'Output stored in S3, jobs are independently retriable' }
+    ];
+    var html='<div class="step-card"><div class="step-type challenge">⚡ Workload Classification — 140 pts</div><h2>For each workload, choose the right purchasing model</h2><div class="workload-classify">';
+    workloads.forEach(function(w,i){
+      html+='<div class="wl-row" id="wl-'+i+'"><div class="wl-title">'+w.title+'</div><div class="wl-desc">'+w.desc+'</div><div class="wl-btns">';
+      WL_LABELS.forEach(function(l,j){
+        html+='<button class="wl-btn" onclick="answerWL('+i+','+j+')">'+l+'</button>';
+      });
+      html+='</div><div class="wl-fb" id="wl-fb-'+i+'">'+WL_EXPLAIN[i]+'</div></div>';
+    });
+    html+='</div><div class="step-actions"><span style="font-size:0.8rem;color:var(--text-muted)">Answer all 4 to continue</span><button class="btn btn-primary" id="wl-next" onclick="nextStep()" disabled>Interruption strategies →</button></div></div>';
+    c.innerHTML=html;
+
+  } else if(currentStep===2){
+    strOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">⚡ Interruption Strategies</div>
+        <h2>Four operational patterns that make Spot safe in production — click each</h2>
+        <div class="strategy-cards">
+          <div class="str-card" id="str-0" onclick="openStr(0)">
+            <div class="sc-head"><span class="sc-icon">🎲</span><span class="sc-title">Instance type diversification</span><span class="sc-save">↓ interruption risk</span></div>
+            <div class="sc-body">Spot capacity pools are per instance type per AZ. If you request only c5.xlarge in us-east-1a, your entire fleet can be interrupted simultaneously if AWS reclaims that pool.<br><br>Best practice: configure 5–10 instance types with equivalent compute profiles. Example: c5.xlarge, c5a.xlarge, c5n.xlarge, c4.xlarge, c5d.xlarge. EC2 Auto Scaling's capacity-optimised allocation strategy automatically picks the instance type with the lowest interruption frequency across your configured pool.<br><br>In Karpenter: set multiple instance families in the NodePool and Karpenter automatically diversifies. This single change can reduce interruption frequency from 15–20% to &lt;5% for the same workload.</div>
+          </div>
+          <div class="str-card" id="str-1" onclick="openStr(1)">
+            <div class="sc-head"><span class="sc-icon">🏗️</span><span class="sc-title">Mixed on-demand / Spot ASG with base capacity</span><span class="sc-save">~60% savings on scale-out</span></div>
+            <div class="sc-body">Pattern: configure Auto Scaling group with a mixed instances policy:<br>
+            — <code>OnDemandBaseCapacity: 2</code> (always-on minimum)<br>
+            — <code>OnDemandPercentageAboveBase: 20</code> (20% of scale-out on-demand, 80% Spot)<br><br>
+            Result: your base HA capacity is protected on on-demand. All burst scaling uses 80% Spot. For a service that scales from 2 to 20 instances during business hours, 14–16 of those 18 burst instances are Spot = ~65% savings on the variable portion.<br><br>
+            Karpenter equivalent: two NodePools — one on-demand with <code>karpenter.sh/capacity-type: on-demand</code> and minimum replicas, one Spot-preferred for the rest. HPA drives scaling into the Spot pool first.</div>
+          </div>
+          <div class="str-card" id="str-2" onclick="openStr(2)">
+            <div class="sc-head"><span class="sc-icon">💾</span><span class="sc-title">Checkpointing for stateful batch jobs</span><span class="sc-save">survive interruptions</span></div>
+            <div class="sc-body">For ML training, data processing, or any long-running batch job: checkpoint state to S3 or EFS at regular intervals. On interruption, the next instance resumes from the last checkpoint.<br><br>
+            Implementation:<br>
+            — Write checkpoint every N epochs / N minutes / N records processed<br>
+            — On startup: check S3 for an existing checkpoint, resume from it<br>
+            — On SIGTERM (interruption notice): flush current checkpoint before exit<br><br>
+            For ML: PyTorch and TensorFlow both have native checkpoint APIs. AWS SageMaker handles this automatically with managed Spot training (saves up to 90% on training jobs).<br><br>
+            For data pipelines: design for idempotency. Processing the same record twice should produce the same output. This makes any interrupted job safely restartable without deduplication logic.</div>
+          </div>
+          <div class="str-card" id="str-3" onclick="openStr(3)">
+            <div class="sc-head"><span class="sc-icon">🔔</span><span class="sc-title">Interruption notice handling via instance metadata</span><span class="sc-save">graceful shutdown</span></div>
+            <div class="sc-body">AWS provides a 2-minute warning before Spot termination via the instance metadata endpoint: <code>http://169.254.169.254/latest/meta-data/spot/interruption-action</code>. Poll this endpoint every 5 seconds in a background thread or sidecar.<br><br>
+            On interruption notice:<br>
+            1. Stop accepting new work (deregister from ALB target group, stop polling SQS)<br>
+            2. Complete in-flight work if it will finish within 2 minutes<br>
+            3. Checkpoint state, push to S3<br>
+            4. Exit cleanly<br><br>
+            AWS also publishes an EventBridge event: <code>EC2 Spot Instance Interruption Warning</code> — use this to trigger ASG pre-scaling (spin up replacement instance before the current one terminates). This eliminates capacity gaps during interruptions.<br><br>
+            Tools: aws-node-termination-handler (for Kubernetes) automates draining nodes on interruption notice.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 4 to continue</span>
+          <button class="btn btn-primary" id="str-next" onclick="nextStep()" disabled>Results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=120?'🏆':score>=60?'🎯':'📚'}</div>
+        <h2>${score>=120?'Spot master!':score>=60?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/140</span></div>
+        <p>Spot isn't a gamble — it's an engineering decision. Workloads designed for interruption run reliably on Spot and save 60–90% compared to on-demand.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Interrupt-tolerant workloads: batch processing, ML training, video transcoding, stateless web serving with HA. Never use Spot for: databases, stateful transactions, or anything that can't survive a 2-minute shutdown window.</li>
+          <li>Diversify across 5+ instance types. Single-type Spot fleets have correlated interruption risk. Capacity-optimised allocation plus type diversity is the most reliable Spot configuration.</li>
+          <li>Mixed on-demand/Spot ASGs: set OnDemandBaseCapacity for minimum HA, scale the rest on Spot. This gives you safety + economics without sacrificing availability SLA.</li>
+          <li>Poll the instance metadata interruption endpoint every 5 seconds. A 2-minute warning is enough to drain gracefully, checkpoint state, and deregister from load balancers. Don't get caught unprepared.</li>
+          <li>SageMaker managed Spot training applies all these patterns automatically for ML workloads — checkpointing, interruption handling, retries. If you're training models on EC2 directly, consider migrating to SageMaker before building your own interruption infrastructure.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Back to track →</a>
+          <a href="devops-module12.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

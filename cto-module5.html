@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 5: Cost Anomaly Response — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .alert-card {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin: 14px 0;
+    }
+    .alert-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .alert-title  { font-weight:800; font-size:1rem; color:var(--danger); }
+    .alert-time   { font-size:0.75rem; color:var(--text-muted); }
+    .alert-body   { font-size:0.85rem; line-height:1.6; color:var(--text); }
+
+    .drill-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:10px; margin:14px 0; }
+    .drill-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+      min-height: 100px;
+    }
+    .drill-card:hover:not(.revealed) { border-color: var(--primary); transform: translateY(-2px); }
+    .drill-card.revealed { cursor: default; }
+    .drill-card.revealed.hot  { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+    .drill-card.revealed.warm { border-color: var(--warning); background: rgba(245,158,11,0.08); }
+    .drill-card.revealed.cool { border-color: var(--success); background: rgba(34,197,94,0.08); }
+    .drill-icon  { font-size:1.4rem; margin-bottom:6px; }
+    .drill-name  { font-weight:700; font-size:0.85rem; margin-bottom:4px; }
+    .drill-hint  { font-size:0.72rem; color:var(--primary); font-weight:600; }
+    .drill-reveal { display:none; font-size:0.75rem; line-height:1.5; }
+    .drill-status { font-weight:700; font-size:0.82rem; margin-bottom:4px; }
+    .drill-card.revealed .drill-hint  { display:none; }
+    .drill-card.revealed .drill-reveal { display:block; }
+
+    .response-opts { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .resp-opt { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:14px 18px; cursor:pointer; transition:all 0.15s; }
+    .resp-opt:hover:not(.locked) { border-color:var(--primary); }
+    .resp-opt.locked { cursor:default; }
+    .resp-opt.good { border-color:var(--success); background:rgba(34,197,94,0.06); }
+    .resp-opt.ok   { border-color:var(--warning); background:rgba(245,158,11,0.06); }
+    .resp-opt.bad  { border-color:var(--danger);  background:rgba(239,68,68,0.06); }
+    .ro-title  { font-weight:700; font-size:0.9rem; margin-bottom:4px; }
+    .ro-sub    { font-size:0.8rem; color:var(--text-muted); }
+    .ro-reveal { display:none; margin-top:10px; padding:10px 14px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.82rem; line-height:1.6; }
+    .resp-opt.good .ro-reveal,
+    .resp-opt.ok   .ro-reveal,
+    .resp-opt.bad  .ro-reveal { display:block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Module 5 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var drillRevealed = 0;
+var decisionMade = false;
+
+var drillItems = [
+  { icon:'💻', name:'EC2 spend',       hint:'Normal. $34K this week vs $33.8K last week.', cls:'cool', status:'✅ Normal', detail:'Compute baseline is flat. No new instances, no unexpected scaling events.' },
+  { icon:'🗄️', name:'RDS spend',       hint:'Normal. $18K, consistent with last 4 weeks.', cls:'cool', status:'✅ Normal', detail:'Database costs flat. No read replica events or storage spike.' },
+  { icon:'📦', name:'S3 storage',      hint:'Up 8%. Expected — we\'re adding users.', cls:'warm', status:'⚠️ Growing', detail:'Growing linearly with user uploads. Expected and in-budget trajectory.' },
+  { icon:'🌐', name:'Data Transfer',   hint:'⚠️ $41,200 this week. Normally $800.', cls:'hot',  status:'🔥 SPIKE', detail:'51× normal egress. Started Tuesday 14:00 UTC. Outbound to internet, not within AWS.' },
+  { icon:'⚡', name:'Lambda',          hint:'Normal. 2M invocations, $12.', cls:'cool', status:'✅ Normal', detail:'Function invocations and duration both normal.' },
+  { icon:'🔍', name:'CloudFront',      hint:'Up 3%. Within normal variation.', cls:'cool', status:'✅ Normal', detail:'CDN traffic slightly elevated, consistent with recent feature launch.' }
+];
+
+function drillReveal(idx) {
+  var card = document.getElementById('drill-' + idx);
+  if (!card || card.classList.contains('revealed')) return;
+  card.classList.add('revealed', drillItems[idx].cls);
+  drillRevealed++;
+  if (drillRevealed >= drillItems.length) {
+    document.getElementById('drill-next').disabled = false;
+  }
+}
+
+function chooseResponse(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var outcomes = ['bad','good','ok','bad'];
+  var pts      = [0, 160, 80, 0];
+  score += pts[idx];
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.resp-opt').forEach(function(c) { c.classList.add('locked'); });
+  document.getElementById('ro-' + idx).classList.add(outcomes[idx]);
+  document.getElementById('resp-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🚨 Anomaly Alert</div>
+        <h2>Friday 4:45 PM. This hits your phone.</h2>
+
+        <div class="alert-card">
+          <div class="alert-header">
+            <span style="font-size:1.4rem">🚨</span>
+            <div>
+              <div class="alert-title">AWS Cost Anomaly Detected — $40,800 above baseline</div>
+              <div class="alert-time">Friday, 17:48 UTC · Detected by AWS Cost Anomaly Detection</div>
+            </div>
+          </div>
+          <div class="alert-body">
+            Estimated spend this week: <strong>$84,100</strong> vs. expected <strong>$43,300</strong><br>
+            Anomaly detected across: <strong>Data Transfer (Out to Internet)</strong><br>
+            Anomaly start: <strong>Tuesday, ~14:00 UTC</strong><br>
+            Projected monthly impact at current rate: <strong>+$163,200/month</strong>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          Your normal monthly bill is ~$43K. If this continues for a full month, it's <strong>$163K extra</strong>. That's Friday afternoon. Your on-call engineer is off this weekend.
+          <br><br>
+          In the next step you'll drill into the cost breakdown to find the source.
+        </div>
+
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Investigate →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    drillRevealed = 0;
+    var cards = drillItems.map(function(item, i) {
+      return '<div class="drill-card" id="drill-' + i + '" onclick="drillReveal(' + i + ')">' +
+        '<div class="drill-icon">' + item.icon + '</div>' +
+        '<div class="drill-name">' + item.name + '</div>' +
+        '<div class="drill-hint">Click to check →</div>' +
+        '<div class="drill-reveal"><div class="drill-status">' + item.status + '</div>' + item.detail + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🔍 Drill Down</div>
+        <h2>Which service is spiking?</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">You're in AWS Cost Explorer. Click each service to check its spend this week vs. last week.</p>
+        <div class="drill-grid">${cards}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Check all services to continue</span>
+          <button class="btn btn-primary" id="drill-next" onclick="nextStep()" disabled>Found it →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    decisionMade = false;
+    var opts = [
+      { title: '① Wait until Monday — it\'s Friday, the team needs the weekend', sub: 'The cost has already accrued. Let the on-call team handle it Monday.', reveal: 'At $163K/month projected run rate, waiting until Monday adds ~$11,500 in unnecessary cost (3 days × $3,840/day). Cost anomalies don\'t pause for weekends. A Friday 5pm anomaly that\'s left until Monday is exactly why on-call processes need to include cost anomalies alongside uptime incidents.' },
+      { title: '② Immediately identify the source, stop the bleeding, then do the full RCA', sub: 'Find what\'s generating the egress, stop it if possible, investigate root cause.', reveal: 'This is the correct two-stage response. Stage 1: triage — identify and stop the traffic if it\'s unintended. Stage 2: RCA — understand why it happened, implement a fix, and add monitoring to prevent recurrence. Data Transfer spikes are usually caused by: a misconfigured S3 bucket (public access + large objects), a debug endpoint returning large payloads, or a misconfigured CDN origin pull.' },
+      { title: '③ Set a spending limit in AWS to stop the anomaly automatically', sub: 'AWS will stop billing once you hit the cap.', reveal: 'AWS does not have a hard spending cap that terminates resources. AWS Cost Anomaly Detection and Budgets can alert you, but they can\'t stop a running workload. Only you can terminate the resource or fix the misconfiguration causing the egress. This is a common misconception — there is no AWS "kill switch" for spend.' },
+      { title: '④ Call AWS support and ask them to reverse the charges', sub: 'If it\'s a misconfiguration, AWS might credit it.', reveal: 'AWS occasionally offers credits for anomalies caused by misconfigurations, but this is at their discretion and not guaranteed. The right first step is to stop the bleeding — credits, if available, come after the fact. Calling AWS before you\'ve identified and fixed the root cause is premature.' }
+    ];
+
+    var cards2 = opts.map(function(o, i) {
+      return '<div class="resp-opt" id="ro-' + i + '" onclick="chooseResponse(' + i + ')">' +
+        '<div class="ro-title">' + o.title + '</div>' +
+        '<div class="ro-sub">' + o.sub + '</div>' +
+        '<div class="ro-reveal">' + o.reveal + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎯 Response — up to 160 pts</div>
+        <h2>Data Transfer is 51× normal. What do you do right now?</h2>
+        <p style="color:var(--text-muted);margin-bottom:14px">You've confirmed the source: outbound data transfer to the internet, started Tuesday, still running. $3,840 is accumulating every day. It's 5pm Friday.</p>
+        <div class="response-opts">${cards2}</div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="resp-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 160;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'Anomaly-ready CTO!'; desc = 'Triage first, RCA second. That\'s the right incident response pattern for cost anomalies too.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'Cost anomalies are incidents. They need triage response, not Monday-morning reviews.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'The key misconceptions: AWS has no spending caps (only alerts), and cost anomalies don\'t stop over weekends. Triage now, RCA later.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>AWS Cost Anomaly Detection can alert you in near-real-time (configurable thresholds). Set it up before you need it — not after.</li>
+            <li>There is no AWS spending cap that terminates resources. Budgets and alerts notify; they don't stop spend.</li>
+            <li>Data Transfer spikes are almost always caused by: misconfigured S3 public access, debug endpoints returning large payloads, or CDN misconfiguration pulling from origin repeatedly.</li>
+            <li>Cost anomalies are incidents. They need the same triage process: detect → identify → contain → root cause → fix → prevent recurrence.</li>
+            <li>Waiting until Monday costs real money. At a $163K/month run rate, 3 days = $16K. Cost incidents need weekend on-call coverage too.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

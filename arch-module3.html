@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 3: Instance Right-Sizing — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .workload-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin: 10px 0;
+      transition: border-color 0.15s;
+    }
+    .workload-card.solved { border-color: rgba(34,197,94,0.35); }
+    .wc-title { font-weight: 800; font-size: 0.92rem; margin-bottom: 8px; }
+    .metric-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .metric-chip { background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 0.75rem; }
+    .metric-chip strong { color: var(--accent); }
+    .pick-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pick-btn {
+      flex: 1;
+      min-width: 120px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 700;
+      transition: all 0.15s;
+      text-align: left;
+      color: var(--text);
+    }
+    .pick-btn:hover:not(:disabled):not(.chosen):not(.wrong-pick) { border-color: var(--primary); }
+    .pick-btn:disabled { cursor: default; }
+    .pick-btn.correct-pick { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); }
+    .pick-btn.wrong-pick   { border-color: var(--danger);  background: rgba(239,68,68,0.08); opacity:0.6; }
+    .pick-btn.revealed     { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); }
+    .wc-explain { display: none; margin-top: 10px; padding: 10px 14px; background: rgba(0,0,0,0.2); border-radius: 8px; font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); }
+    .wc-explain.show { display: block; }
+
+    .score-tally { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+    .st-row { display: flex; justify-content: space-between; font-size: 0.84rem; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .st-row:last-child { border-bottom: none; font-weight: 800; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 3 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var solved = 0;
+var WORKLOAD_COUNT = 5;
+
+// Instance family reference (on-demand us-east-1, per hour)
+// m5 (general): m5.large $0.096, m5.xlarge $0.192, m5.2xlarge $0.384
+// c5 (compute-opt): c5.large $0.085, c5.xlarge $0.170, c5.2xlarge $0.340
+// r5 (memory-opt): r5.large $0.126, r5.xlarge $0.252, r5.2xlarge $0.504
+// t3 (burstable): t3.medium $0.0416, t3.large $0.0832, t3.xlarge $0.1664
+
+var workloads = [
+  {
+    id: 0,
+    title: 'Backend API — Node.js',
+    metrics: [
+      { label: 'Avg CPU', val: '12%' },
+      { label: 'Peak CPU', val: '35%' },
+      { label: 'Memory used', val: '1.8 GB / 8 GB' },
+      { label: 'Traffic pattern', val: 'Steady, light spikes' }
+    ],
+    current: 'm5.xlarge ($0.192/hr · 4 vCPU · 16 GB RAM)',
+    options: [
+      { label: 't3.large\n$0.083/hr · 2 vCPU · 8 GB', correct: true },
+      { label: 'm5.xlarge\n$0.192/hr · 4 vCPU · 16 GB', correct: false },
+      { label: 'c5.xlarge\n$0.170/hr · 4 vCPU · 8 GB', correct: false },
+      { label: 'r5.large\n$0.126/hr · 2 vCPU · 16 GB', correct: false }
+    ],
+    explain: 't3.large is the right call. CPU averages 12% with peaks at 35% — the burstable credit model handles this well, and 2 vCPU is enough. Memory usage is 1.8 GB; the 8 GB on t3.large gives headroom. The m5.xlarge has 4× the memory needed, costing $0.192/hr vs. $0.083/hr — saving $79/mo per instance. Note: use t3 over t2 for new deployments (same price, better baseline CPU). For a fleet of 10, this saves ~$790/mo.'
+  },
+  {
+    id: 1,
+    title: 'ML model inference (synchronous)',
+    metrics: [
+      { label: 'Avg CPU', val: '78%' },
+      { label: 'Peak CPU', val: '95%' },
+      { label: 'Memory used', val: '3.2 GB / 16 GB' },
+      { label: 'Traffic pattern', val: 'Bursty, latency-sensitive' }
+    ],
+    current: 'm5.xlarge ($0.192/hr · 4 vCPU · 16 GB RAM)',
+    options: [
+      { label: 't3.large\n$0.083/hr · 2 vCPU · 8 GB', correct: false },
+      { label: 'c5.xlarge\n$0.170/hr · 4 vCPU · 8 GB', correct: true },
+      { label: 'r5.xlarge\n$0.252/hr · 4 vCPU · 32 GB', correct: false },
+      { label: 'm5.2xlarge\n$0.384/hr · 8 vCPU · 32 GB', correct: false }
+    ],
+    explain: 'c5.xlarge is the right pick. CPU runs at 78% average — this is NOT burstable workload territory (t3 depletes credits and throttles). The c5 family is compute-optimised: same vCPU as m5 but faster processors (Intel Cascade Lake) at a lower price ($0.170 vs. $0.192). Memory usage is 3.2 GB — c5.xlarge has 8 GB (adequate). The m5.2xlarge would handle it but is 2× over-provisioned on CPU and memory. r5 is wrong — memory is not the bottleneck here.'
+  },
+  {
+    id: 2,
+    title: 'In-memory cache layer (Redis-like)',
+    metrics: [
+      { label: 'Avg CPU', val: '8%' },
+      { label: 'Peak CPU', val: '22%' },
+      { label: 'Memory used', val: '22 GB / 32 GB' },
+      { label: 'Traffic pattern', val: 'Steady reads' }
+    ],
+    current: 'm5.2xlarge ($0.384/hr · 8 vCPU · 32 GB RAM)',
+    options: [
+      { label: 'c5.xlarge\n$0.170/hr · 4 vCPU · 8 GB', correct: false },
+      { label: 't3.2xlarge\n$0.333/hr · 8 vCPU · 32 GB', correct: false },
+      { label: 'r5.xlarge\n$0.252/hr · 4 vCPU · 32 GB', correct: true },
+      { label: 'm5.xlarge\n$0.192/hr · 4 vCPU · 16 GB', correct: false }
+    ],
+    explain: 'r5.xlarge is correct. Memory is the constraint: 22 GB used, so the 16 GB m5.xlarge would be too small. The r5 family is memory-optimised — the r5.xlarge gives 32 GB RAM at $0.252/hr vs. $0.384/hr for m5.2xlarge. CPU is low (8%); the 4 vCPU r5 is sufficient. Saving $0.132/hr = $97/mo per instance vs. m5.2xlarge. t3.2xlarge has the same RAM as m5.2xlarge but burstable CPU — fine on CPU, but memory-optimised r5 is better value when memory is the binding constraint.'
+  },
+  {
+    id: 3,
+    title: 'Background batch job (nightly)',
+    metrics: [
+      { label: 'Avg CPU', val: '88%' },
+      { label: 'Peak CPU', val: '100%' },
+      { label: 'Memory used', val: '4 GB / 16 GB' },
+      { label: 'Runtime', val: '3–5 hrs/night, interruptible' }
+    ],
+    current: 'm5.xlarge on-demand ($0.192/hr)',
+    options: [
+      { label: 'c5.xlarge Spot\n~$0.065/hr (avg)', correct: true },
+      { label: 'c5.xlarge On-Demand\n$0.170/hr', correct: false },
+      { label: 'm5.xlarge Reserved 1yr\n$0.118/hr', correct: false },
+      { label: 'r5.xlarge On-Demand\n$0.252/hr', correct: false }
+    ],
+    explain: 'c5.xlarge Spot is the winner here. The job is CPU-bound (88% avg), so c5 is the right family. It\'s nightly, runs 3–5 hours, and is interruptible — exactly the Spot use case. EC2 Spot for c5.xlarge in us-east-1 averages ~$0.06–0.08/hr (vs. $0.170/hr on-demand) — roughly 60% savings. With checkpointing or AWS Batch, interruption is handled gracefully. A 1yr Reserved m5 would be $0.118/hr and saves less than Spot for an interruptible job. On-demand or Reserved makes sense for steady workloads, not a 4-hour nightly job.'
+  },
+  {
+    id: 4,
+    title: 'Development / staging environment',
+    metrics: [
+      { label: 'Avg CPU (business hours)', val: '15%' },
+      { label: 'Usage hours/day', val: '~9 hrs (business hours)' },
+      { label: 'Memory used', val: '2 GB / 8 GB' },
+      { label: 'SLA', val: 'None — can tolerate interruption' }
+    ],
+    current: 'm5.large on-demand 24/7 ($0.096/hr)',
+    options: [
+      { label: 't3.large scheduled stop\n$0.083/hr × 9hrs/day', correct: true },
+      { label: 'm5.large Reserved 1yr\n$0.059/hr', correct: false },
+      { label: 't3.large Spot\n~$0.025/hr', correct: false },
+      { label: 'm5.large 24/7 On-Demand\n$0.096/hr', correct: false }
+    ],
+    explain: 't3.large with scheduled stop/start wins. Stopping dev instances outside business hours (e.g., 7pm–8am + weekends) reduces runtime from 720 hrs/month to ~195 hrs/month. t3.large at $0.083/hr × 195 hrs = $16/mo vs. $69/mo running 24/7. That\'s 77% savings. Spot is cheaper per hour but dev instances being interrupted mid-afternoon is disruptive. Reserved makes no sense for a dev instance — you\'d pay 24/7 even when it\'s stopped (Reserved billing continues whether running or not). Scheduled stop/start via AWS Instance Scheduler is free to implement.'
+  }
+];
+
+function pickAnswer(wId, optIdx) {
+  var w = workloads[wId];
+  var buttons = document.querySelectorAll('#wcard-' + wId + ' .pick-btn');
+  buttons.forEach(function(b) { b.disabled = true; });
+  if (w.options[optIdx].correct) {
+    buttons[optIdx].classList.add('correct-pick');
+    score += 30;
+  } else {
+    buttons[optIdx].classList.add('wrong-pick');
+    // reveal correct
+    w.options.forEach(function(o, i) {
+      if (o.correct) buttons[i].classList.add('revealed');
+    });
+  }
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.getElementById('explain-' + wId).classList.add('show');
+  document.getElementById('wcard-' + wId).classList.add('solved');
+  solved++;
+  if (solved >= WORKLOAD_COUNT) {
+    document.getElementById('sizing-next').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📦 Right-Sizing</div>
+        <h2>Over-provisioning is the default. It doesn't have to be.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Engineers provision for peak load, then peak × 2 for safety margin, then add the next instance size up "just in case." The resulting fleet runs at 10–15% average CPU — a number Flexera and AWS both report consistently across enterprise cloud users.</p>
+        <div class="scenario-box">
+          <strong>EC2 instance families — when to use which:</strong><br>
+          <strong>m5 (general purpose):</strong> balanced CPU/memory, the safe default<br>
+          <strong>c5 (compute-optimised):</strong> higher CPU-to-memory ratio, ~10% cheaper than m5 for compute-heavy work<br>
+          <strong>r5 (memory-optimised):</strong> 2× the RAM per vCPU vs. m5 — right choice when memory is the constraint<br>
+          <strong>t3 (burstable):</strong> baseline CPU + burst credits — right for low average / occasional spike workloads<br><br>
+          Using the wrong family for a workload wastes 20–60% of the instance cost even before sizing.
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Right-size 5 workloads →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    solved = 0;
+    var cardsHtml = workloads.map(function(w) {
+      var metricsHtml = w.metrics.map(function(m) {
+        return '<div class="metric-chip">' + m.label + ': <strong>' + m.val + '</strong></div>';
+      }).join('');
+      var optsHtml = w.options.map(function(o, i) {
+        return '<button class="pick-btn" onclick="pickAnswer(' + w.id + ',' + i + ')">' + o.label.replace('\n','<br>') + '</button>';
+      }).join('');
+      return `
+        <div class="workload-card" id="wcard-${w.id}">
+          <div class="wc-title">${w.title}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Current: ${w.current}</div>
+          <div class="metric-row">${metricsHtml}</div>
+          <div class="pick-row">${optsHtml}</div>
+          <div class="wc-explain" id="explain-${w.id}">${w.explain}</div>
+        </div>`;
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📦 Right-Sizing — 30 pts each</div>
+        <h2>Pick the right instance for each workload</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Use the metrics to choose the most cost-efficient instance type. Each correct answer: 30 pts.</p>
+        ${cardsHtml}
+        <div class="step-actions" style="margin-top:16px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Answer all 5 to continue</span>
+          <button class="btn btn-primary" id="sizing-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 150;
+    var badge = score >= 120 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 120 ? 'Right-sizing champion!' : score >= 60 ? 'Good instincts!' : 'Worth reviewing!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Right-sizing is one of the highest-ROI FinOps activities — no architectural changes needed, just matching the instance family and size to the actual workload.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Match the family to the bottleneck: CPU-heavy → c5; memory-heavy → r5; bursty/low-avg → t3; balanced → m5. Using m5 by default wastes 10–30% compared to a tuned choice.</li>
+            <li>Burstable instances (t3) work well for workloads with low average CPU and occasional spikes. They're wrong for sustained high-CPU — the baseline CPU credits run out and the instance throttles.</li>
+            <li>Interruptible batch workloads → Spot. Spot pricing for c5/m5 instances typically saves 50–70% vs. on-demand. Use AWS Batch or checkpointing to handle interruptions.</li>
+            <li>Dev/staging environments running 24/7 are a common waste source. Scheduled stop/start can reduce runtime to business hours — 195 hrs/month instead of 720 hrs/month.</li>
+            <li>Reserved Instances and Savings Plans make sense for steady workloads with known runtime. Not for dev instances or batch jobs that run a few hours a day.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module4.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

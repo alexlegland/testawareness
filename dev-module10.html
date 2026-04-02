@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 6: Logging at Scale — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .log-line { font-family: 'Courier New', monospace; font-size: 0.75rem; padding: 5px 12px; border-radius: 6px; margin: 3px 0; line-height: 1.5; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .log-line:hover:not(.flagged):not(.locked) { background: rgba(108,71,255,0.08); border-color: var(--primary); }
+    .log-line.flagged { border-color: var(--accent); background: rgba(255,107,53,0.08); }
+    .log-line.locked  { cursor: default; }
+    .log-line.correct-flag { border-color: var(--success); background: rgba(34,197,94,0.07); }
+    .log-line.false-alarm  { border-color: var(--danger);  background: rgba(239,68,68,0.07); }
+    .log-date { color: #6a737d; }
+    .log-info  { color: #79b8ff; font-weight: 700; }
+    .log-debug { color: #b392f0; font-weight: 700; }
+    .log-warn  { color: var(--warning); font-weight: 700; }
+    .log-err   { color: var(--danger); font-weight: 700; }
+    .log-size { float: right; font-size: 0.68rem; font-weight: 700; border-radius: 4px; padding: 1px 6px; }
+    .sz-big  { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .sz-med  { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .sz-ok   { background: rgba(34,197,94,0.1); color: var(--success); }
+
+    .log-explain { display: none; padding: 8px 12px; font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); background: rgba(0,0,0,0.15); border-radius: 6px; margin-top: 4px; }
+    .log-explain.show { display: block; }
+
+    .calc-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
+    .calc-row:last-child { border-bottom: none; font-weight: 800; }
+    .calc-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Module 6 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var flagged = 0;
+var logDone = false;
+var REAL_ISSUES = 4;
+var quizAnswered = false;
+
+var logItems = [
+  { id: 0, correct: true,
+    line: '<span class="log-date">2024-11-14T08:14:22Z</span> <span class="log-debug">[DEBUG]</span> request_id=a4f2 user_id=8821 method=GET path=/api/v1/feed headers={"accept":"application/json","accept-encoding":"gzip","authorization":"Bearer [REDACTED]","user-agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)","x-forwarded-for":"82.45.12.201","x-request-id":"a4f2c3d1"} body=null <span class="log-size sz-big">~1.2 KB/req</span>',
+    explain: '🚨 Logging full request headers on every request at DEBUG level — which is enabled in production. HTTP headers alone add ~500 bytes–1.5 KB per log line. At 500 req/sec that\'s 600–750 KB/sec of just header logs = ~50 GB/day = $25.50/day in CloudWatch ingestion ($0.50/GB ingested). Fix: log only what you need (method, path, user_id). Move verbose headers to TRACE level disabled in production.'
+  },
+  { id: 1, correct: false,
+    line: '<span class="log-date">2024-11-14T08:14:22Z</span> <span class="log-err">[ERROR]</span> payment_id=PAY-9921 status=failed reason="card_declined" user_id=8821 amount=49.99',
+    explain: '✅ This is a good log line. Structured, concise, ERROR level for an actual error, contains the fields needed to diagnose the issue (payment_id, status, reason, user_id, amount). No unnecessary bulk. This is how production logging should look.'
+  },
+  { id: 2, correct: true,
+    line: '<span class="log-date">2024-11-14T08:14:22Z</span> <span class="log-debug">[DEBUG]</span> db_query sql="SELECT id, name, email, preferences, avatar_url, created_at, updated_at, last_login, login_count, feature_flags, notification_settings FROM users WHERE id=8821" rows_returned=1 duration_ms=3 result=[{"id":8821,"name":"Alice","email":"alice@example.com","preferences":"{...4KB JSON...}"}] <span class="log-size sz-big">~5 KB/query</span>',
+    explain: '🚨 Logging full SQL query results including the row data — with the 4 KB preferences JSON field inlined. At 249,600 queries/hour (before the N+1 fix), that\'s 1.2 GB/hour of query result logs = $14.40/hr = $345/day. Even at 9,600 queries/hr after the fix, that\'s $13/day. Fix: log query metadata (sql, duration, rows_returned) but never log result data. If you need result logging for debugging, use sampling (1% of requests) or a structured APM tool.'
+  },
+  { id: 3, correct: true,
+    line: '<span class="log-date">2024-11-14T08:14:23Z</span> <span class="log-info">[INFO]</span> cache_miss key="activity_feed:8821" ttl=60 <span class="log-size sz-ok">~80 B/req</span><br><span class="log-date">2024-11-14T08:14:23Z</span> <span class="log-info">[INFO]</span> cache_hit  key="activity_feed:8821" ttl=58 <span class="log-size sz-ok">~70 B/req</span><br><span class="log-date">2024-11-14T08:14:23Z</span> <span class="log-info">[INFO]</span> cache_hit  key="activity_feed:8821" ttl=57 ...<br><span class="log-date">2024-11-14T08:14:23Z</span> <span class="log-info">[INFO]</span> cache_hit  key="activity_feed:8821" ttl=56 ...',
+    explain: '🚨 Logging every cache hit at INFO level. Cache hits are the happy path — they should be invisible. At 500 req/sec with an 80% cache hit rate, that\'s 400 INFO log lines/sec = 34.5 million/day. Even at 70 bytes each that\'s 2.4 GB/day = $1.20/day in ingestion. Fix: metrics, not logs. Track cache hit/miss ratio as a CloudWatch metric (free), not as log lines. Only log cache misses if you need them for debugging, and at DEBUG level.'
+  },
+  { id: 4, correct: false,
+    line: '<span class="log-date">2024-11-14T08:14:24Z</span> <span class="log-warn">[WARN]</span> rate_limit_approaching user_id=8821 requests_last_minute=87 limit=100 remaining=13',
+    explain: '✅ Good warning. Structured, concise, appropriate level (WARN, not INFO or DEBUG), and fires only when approaching the threshold — not on every request. This is an example of event-driven logging: log the noteworthy thing, not the routine thing.'
+  },
+  { id: 5, correct: true,
+    line: '<span class="log-date">2024-11-14T08:14:24Z</span> <span class="log-info">[INFO]</span> request_complete request_id=a4f2 user_id=8821 method=GET path=/api/v1/feed status=200 duration_ms=142 db_queries=52 cache_hits=0 response_size_bytes=18432 response_body={"activities":[{"id":1,"type":"purchase","amount":49.99,"product":{"id":..."} <span class="log-size sz-big">~20 KB/req</span>',
+    explain: '🚨 Logging the full JSON response body on every request. At 18 KB per response × 500 req/sec = 9 MB/sec = 777 GB/day = <strong>$388/day</strong> in CloudWatch ingestion alone. This single log line configuration can cost more than the EC2 fleet running the service. Fix: log metadata (status, duration, size, query count) — never the response body. If you need response inspection, use distributed tracing (X-Ray, Jaeger) with sampling, not structured logs.'
+  }
+];
+
+function flagLine(id) {
+  if (logDone) return;
+  var item = logItems.find(function(x){ return x.id === id; });
+  if (!item) return;
+  var el = document.getElementById('log-' + id);
+  var ex = document.getElementById('logex-' + id);
+  if (el.classList.contains('flagged')) return;
+  el.classList.add('flagged');
+  ex.classList.add('show');
+  if (item.correct) {
+    el.classList.add('correct-flag');
+    score += 25;
+  } else {
+    el.classList.add('false-alarm');
+    score = Math.max(0, score - 10);
+  }
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  flagged++;
+  if (flagged >= logItems.length) {
+    logDone = true;
+    document.getElementById('log-next').disabled = false;
+  } else if (flagged >= REAL_ISSUES) {
+    document.getElementById('log-next').disabled = false;
+  }
+}
+
+function revealAllLogs() {
+  logDone = true;
+  logItems.forEach(function(item) {
+    var el = document.getElementById('log-' + item.id);
+    var ex = document.getElementById('logex-' + item.id);
+    if (!el.classList.contains('flagged')) {
+      el.classList.add('locked');
+      ex.classList.add('show');
+    }
+  });
+  document.getElementById('log-next').disabled = false;
+  document.getElementById('reveal-logs').style.display = 'none';
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">📋 Logging Costs</div>
+        <h2>Logs feel free. They aren't.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">In development, logging is free — you're writing to stdout or a local file. In production with CloudWatch Logs, every byte you write costs money.</p>
+        <div class="scenario-box">
+          <strong>CloudWatch Logs pricing (us-east-1):</strong><br>
+          — Ingestion: <strong>$0.50/GB</strong> of log data ingested<br>
+          — Storage: <strong>$0.03/GB/month</strong> (after the free tier)<br>
+          — Insights queries: <strong>$0.005/GB scanned</strong><br><br>
+          A service generating 10 GB/day of logs costs <strong>$5/day = $150/month</strong> in ingestion alone — before storage. A misconfigured logger that dumps full request/response bodies can easily generate 100–500 GB/day.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Review the logs →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    flagged = 0; logDone = false;
+    var linesHtml = logItems.map(function(item) {
+      return `<div class="log-line" id="log-${item.id}" onclick="flagLine(${item.id})">${item.line}</div>
+              <div class="log-explain" id="logex-${item.id}">${item.explain}</div>`;
+    }).join('');
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📋 Log Auditor — 25 pts each (−10 false alarm)</div>
+        <h2>Flag the expensive log lines</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">This is the production log output for one API endpoint at 500 req/sec. Click the lines that are costing significant money. 4 real issues, 2 are fine.</p>
+        <div style="background:#0d0d1c;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:10px 0">
+          ${linesHtml}
+        </div>
+        <div class="step-actions" style="margin-top:10px">
+          <button class="btn btn-ghost" id="reveal-logs" onclick="revealAllLogs()">Reveal All</button>
+          <button class="btn btn-primary" id="log-next" onclick="nextStep()" disabled>Continue →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 40 pts</div>
+        <h2>Your team has 30-day log retention configured on all CloudWatch log groups. You're storing 15 TB of logs/month. A suggestion: switch to 7-day retention. What's the right response?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: Never reduce retention — you might need older logs for a security incident</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Reduce to 7 days across all log groups — same savings, less risk</button>
+          <button class="q-opt" onclick="answerQ(2,true,40,2)">C: Segment by log group type — short retention for debug/info, longer for errors/audit/security</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Move all logs to S3 immediately — S3 is always cheaper than CloudWatch</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Segment by log type.</strong> At $0.03/GB/month storage: 15 TB × $0.03 = $450/mo. But not all logs have equal value after 7 days. Debug and info logs from 25 days ago have near-zero operational value. Error logs and audit trails may be required for compliance (PCI, SOC2 often require 90+ days). The right approach: short retention (3–7 days) for verbose debug/info groups; longer (30–90 days) for errors, auth, and security events. This can cut storage by 60–70% while preserving the logs that actually matter.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 140;
+    var badge = score >= 110 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 110 ? 'Log-cost aware!' : score >= 60 ? 'Good instincts!' : 'Worth revisiting!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Logging full request/response bodies at production scale is one of the fastest ways to generate a surprise AWS bill.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>CloudWatch Logs ingestion costs $0.50/GB. Logging full response bodies (10–50 KB/request) at 500 req/sec generates hundreds of GB/day and hundreds of dollars/day.</li>
+            <li>Log events, not data. Record that a cache miss happened — not the cache contents. Record that a query ran — not the result rows.</li>
+            <li>Cache hits are the happy path — they should be metrics, not log lines. Use CloudWatch custom metrics (free per metric, then $0.30/metric/month) to track hit ratios without log ingestion cost.</li>
+            <li>DEBUG level should be disabled in production by default. Use an environment variable or feature flag to enable it temporarily for specific request IDs during incident investigation.</li>
+            <li>Log retention: segment by log group type. Debug/info can expire in 3–7 days. Errors, auth, and audit logs may need 90+ days for compliance. Blanket 30-day retention for verbose logs wastes most of the storage cost.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

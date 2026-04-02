@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PM Module 7: Cost vs. Speed Tradeoffs — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tradeoff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-size: 0.82rem;
+    }
+    .tg-cell {
+      background: var(--surface2);
+      padding: 12px 14px;
+      line-height: 1.5;
+    }
+    .tg-cell.header {
+      background: #17172a;
+      font-weight: 700;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    .tg-cell.row-header {
+      font-weight: 700;
+      background: #1a1a30;
+    }
+    .tg-cell .tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-top: 4px;
+    }
+    .tag-cheap  { background: rgba(34,197,94,0.15);  color: var(--success); }
+    .tag-med    { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .tag-costly { background: rgba(239,68,68,0.15);  color: var(--danger);  }
+
+    /* workload sorter */
+    .workload-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+    .wl-item {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .wl-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .wl-body { flex: 1; }
+    .wl-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 2px; }
+    .wl-desc { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; }
+    .wl-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .wl-opt {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .wl-opt:hover:not(.locked) { border-color: var(--primary); }
+    .wl-opt.selected-correct { border-color: var(--success); background: rgba(34,197,94,0.12); color: var(--success); }
+    .wl-opt.selected-wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.12);  color: var(--danger); }
+    .wl-opt.reveal-correct   { border-color: var(--success); background: rgba(34,197,94,0.06);  color: var(--success); }
+    .wl-opt.locked { cursor: default; }
+    .wl-feedback { font-size: 0.78rem; margin-top: 8px; line-height: 1.55; display: none; color: var(--text-muted); }
+    .wl-item.answered .wl-feedback { display: block; }
+
+    /* savings calc */
+    .savings-rows { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+    .sav-row {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 0.86rem;
+    }
+    .sav-row .sr-name  { font-weight: 600; flex: 1; }
+    .sav-row .sr-from  { color: var(--text-muted); min-width: 80px; text-align: right; }
+    .sav-row .sr-arrow { color: var(--text-muted); padding: 0 6px; }
+    .sav-row .sr-to    { font-weight: 700; color: var(--success); min-width: 80px; text-align: right; }
+    .sav-row .sr-save  { font-size: 0.78rem; color: var(--success); background: rgba(34,197,94,0.1); padding: 3px 10px; border-radius: 99px; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">PM · Module 7 of 7</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+
+var workloads = [
+  {
+    icon: '🌐',
+    name: 'Customer-facing API',
+    desc: 'Handles all incoming product requests. Latency directly impacts user experience. Must respond within 200ms.',
+    correct: 'on-demand',
+    feedback: {
+      'on-demand': 'Right. Customer-facing APIs need to be available immediately and can\'t tolerate interruptions. Spot instances can be reclaimed by AWS with 2 minutes notice — fine for batch work, unacceptable for live user traffic. On-demand (or Reserved if it runs 24/7) is the right choice here.',
+      'spot': 'Spot instances can be interrupted with 2 minutes notice when AWS needs capacity back. A live customer API on spot would cause random 503 errors for users. Spot is only appropriate for workloads that can be interrupted and restarted.',
+      'reserved': 'Reserved instances make sense for steady, predictable workloads. For a customer-facing API this is workable — but Reserved requires upfront commitment (1–3 years). On-demand is more flexible and equally reliable.'
+    }
+  },
+  {
+    icon: '📧',
+    name: 'Nightly email digest job',
+    desc: 'Processes and sends daily summary emails to all users. Runs once per night, takes ~90 minutes. Timing is flexible ± a few hours.',
+    correct: 'spot',
+    feedback: {
+      'spot': 'Spot is ideal here. The job runs once a night, takes 90 minutes, and timing is flexible. If a spot instance gets interrupted, the job can restart from a checkpoint or simply run later. Spot can save 60–90% vs. on-demand — for a batch job this is essentially free money.',
+      'on-demand': 'On-demand works, but you\'re paying full price for a job that runs once a night and has flexible timing. This is the textbook use case for Spot — interruptible, resumable, non-urgent batch work.',
+      'reserved': 'Reserved instances are for workloads that run continuously (or nearly so). A job that runs 90 minutes a night uses ~6% of a 24h day — committing to a Reserved instance for that would waste 94% of the capacity you\'re paying for.'
+    }
+  },
+  {
+    icon: '🔄',
+    name: 'Background video transcoding queue',
+    desc: 'Converts uploaded videos to web formats. Users can wait 5–10 minutes. Queue depth varies: 0–500 jobs depending on upload activity.',
+    correct: 'spot',
+    feedback: {
+      'spot': 'Good fit. Video transcoding is CPU-intensive, interruptible (transcode can resume from the last keyframe or restart), and users already expect a few minutes wait. Variable queue depth also means you don\'t want to pay for idle capacity — Spot with auto-scaling lets you scale workers to queue depth and pay only when processing.',
+      'on-demand': 'On-demand works but overpriced for this. Transcoding is the classic spot workload: interruptible, asynchronous, latency-tolerant. You\'d be paying on-demand rates for work that runs in bursts on a best-effort basis.',
+      'reserved': 'Variable queue depth (0–500 jobs) makes Reserved a poor fit. You\'d need to size the Reserved fleet for peak load, paying for idle capacity during off-peak periods. Spot with auto-scaling matches cost to actual workload.'
+    }
+  },
+  {
+    icon: '📊',
+    name: 'Analytics database (always-on)',
+    desc: 'Powers the in-product dashboard. Queried by users throughout the day. Average utilisation: 60–70% during business hours, drops to ~10% overnight.',
+    correct: 'reserved',
+    feedback: {
+      'reserved': 'Right. An always-on database with predictable, sustained load is the textbook Reserved instance case. At 60–70% utilisation during business hours, it runs nearly continuously. A 1-year Reserved instance saves ~40% vs on-demand. The 3-year option saves more but reduces flexibility.',
+      'spot': 'Spot instances can be terminated with 2 minutes notice — losing your database mid-query would be catastrophic. RDS Reserved instances exist precisely for this: steady, critical, persistent workloads that can\'t afford interruption.',
+      'on-demand': 'On-demand is fine short-term for databases but expensive for workloads that run continuously. A database at 60–70% utilisation is exactly what Reserved instances are designed for — the savings (40% vs on-demand) are substantial on a 1-year commitment.'
+    }
+  }
+];
+
+var wlAnswered = 0;
+
+function pickWL(wlIdx, optKey) {
+  var item = document.getElementById('wl-' + wlIdx);
+  if (!item || item.classList.contains('answered')) return;
+  item.classList.add('answered');
+
+  var wl = workloads[wlIdx];
+  var correct = optKey === wl.correct;
+  if (correct) score += 35;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+
+  /* mark buttons */
+  item.querySelectorAll('.wl-opt').forEach(function(btn) {
+    btn.classList.add('locked');
+    var key = btn.dataset.key;
+    if (key === wl.correct) btn.classList.add('reveal-correct');
+    if (key === optKey && !correct) btn.classList.add('selected-wrong');
+    if (key === optKey && correct)  btn.classList.add('selected-correct');
+  });
+
+  /* show feedback */
+  var fb = document.getElementById('wl-fb-' + wlIdx);
+  fb.textContent = (correct ? '✅ ' : '❌ Correct answer: ' + wl.correct + '. ') + wl.feedback[optKey];
+
+  wlAnswered++;
+  if (wlAnswered >= workloads.length) {
+    document.getElementById('wl-next-btn').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + Math.min(currentStep + 1, total) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">⚖️ Cost vs. Speed</div>
+        <h2>Not all compute is the same — and the price difference is huge</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          AWS, GCP, and Azure offer the same underlying hardware at very different prices depending on how you commit to it. PMs don't choose instance types — but they define the workload requirements that determine which type Engineering can use.
+        </p>
+
+        <div class="tradeoff-grid">
+          <div class="tg-cell header">Type</div>
+          <div class="tg-cell header">What it means</div>
+          <div class="tg-cell header">Relative cost</div>
+
+          <div class="tg-cell row-header">On-demand</div>
+          <div class="tg-cell">Pay by the hour, no commitment. Start and stop anytime. Available immediately.</div>
+          <div class="tg-cell"><div class="tag tag-med">Baseline (1×)</div></div>
+
+          <div class="tg-cell row-header">Reserved</div>
+          <div class="tg-cell">Commit to 1 or 3 years in exchange for a discount. Same hardware as on-demand, just pre-paid.</div>
+          <div class="tg-cell"><div class="tag tag-cheap">~40–60% cheaper</div></div>
+
+          <div class="tg-cell row-header">Spot</div>
+          <div class="tg-cell">Unused capacity sold at discount. Can be reclaimed by the cloud provider with 2 minutes notice.</div>
+          <div class="tg-cell"><div class="tag tag-cheap">~60–90% cheaper</div></div>
+        </div>
+
+        <div class="tip-card">
+          <strong>The PM-relevant question for each workload:</strong>
+          <ul>
+            <li><strong>Can it be interrupted?</strong> If yes → Spot candidate.</li>
+            <li><strong>Does it run continuously?</strong> If yes → Reserved candidate.</li>
+            <li><strong>Unpredictable or critical availability?</strong> → On-demand.</li>
+          </ul>
+        </div>
+
+        <div class="step-actions">
+          <a href="pm.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Classify workloads →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    wlAnswered = 0;
+    var opts = ['on-demand', 'spot', 'reserved'];
+    var items = workloads.map(function(wl, i) {
+      var btns = opts.map(function(o) {
+        return '<button class="wl-opt" data-key="' + o + '" onclick="pickWL(' + i + ',\'' + o + '\')">' + o + '</button>';
+      }).join('');
+      return '<div class="wl-item" id="wl-' + i + '">' +
+        '<div class="wl-icon">' + wl.icon + '</div>' +
+        '<div class="wl-body">' +
+          '<div class="wl-name">' + wl.name + '</div>' +
+          '<div class="wl-desc">' + wl.desc + '</div>' +
+          '<div class="wl-picker">' + btns + '</div>' +
+          '<div class="wl-feedback" id="wl-fb-' + i + '"></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">🗂️ Workload Classifier — 4 × 35 pts</div>
+        <h2>Match each workload to the right instance type</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          For each workload, pick whether on-demand, spot, or reserved is the right choice. Your choice reveals the reasoning.
+        </p>
+        <div class="workload-list">${items}</div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Classify all 4 to continue</span>
+          <button class="btn btn-primary" id="wl-next-btn" onclick="nextStep()" disabled>See savings →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💰 What this means for a real bill</div>
+        <h2>Same workloads, right instance types — savings at $50K/mo scale</h2>
+        <p style="color:var(--text-muted);margin-bottom:4px">
+          Assume a $50K/month cloud bill where 60% is compute. Here's the impact of matching workloads to the right type.
+        </p>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:16px">Savings percentages are representative estimates — actual discounts vary by region, instance family, and provider.</p>
+
+        <div class="savings-rows">
+          <div class="sav-row">
+            <span class="sr-name">🌐 Customer API (always-on) → Reserved 1yr</span>
+            <span class="sr-from">$12,000</span>
+            <span class="sr-arrow">→</span>
+            <span class="sr-to">$7,200</span>
+            <span class="sr-save">−$4,800</span>
+          </div>
+          <div class="sav-row">
+            <span class="sr-name">📊 Analytics DB (sustained) → Reserved 1yr</span>
+            <span class="sr-from">$8,000</span>
+            <span class="sr-arrow">→</span>
+            <span class="sr-to">$4,800</span>
+            <span class="sr-save">−$3,200</span>
+          </div>
+          <div class="sav-row">
+            <span class="sr-name">📧 Batch jobs (nightly) → Spot</span>
+            <span class="sr-from">$4,000</span>
+            <span class="sr-arrow">→</span>
+            <span class="sr-to">$600</span>
+            <span class="sr-save">−$3,400</span>
+          </div>
+          <div class="sav-row">
+            <span class="sr-name">🔄 Transcoding workers → Spot + autoscale</span>
+            <span class="sr-from">$6,000</span>
+            <span class="sr-arrow">→</span>
+            <span class="sr-to">$1,200</span>
+            <span class="sr-save">−$4,800</span>
+          </div>
+        </div>
+
+        <div class="cost-calc">
+          <div class="cost-line"><span class="cost-name">Before (all on-demand)</span><span class="cost-amount" style="color:var(--text-muted)">$30,000/mo compute</span></div>
+          <div class="cost-line total"><span class="cost-name">After (right types)</span><span class="cost-amount">$13,800/mo compute</span></div>
+        </div>
+
+        <div class="scenario-box">
+          Same hardware. Same workloads. <strong>$16,200/month saved</strong> — just by matching instance type to workload characteristics. This is one of the highest-leverage optimisations in cloud cost management, and it's largely free to implement.
+        </div>
+
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" onclick="nextStep()">See results 🏆</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 3) {
+    var max = 140;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'FinOps PM — complete!'; desc = 'You can classify workloads by interruption tolerance and commit horizon. That\'s the skill that unlocks 40–90% compute savings with no quality tradeoff.'; }
+    else if (pct >= 45){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key question to remember: can this workload be interrupted? If yes, it\'s a Spot candidate. If it runs 24/7, it\'s a Reserved candidate.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'The core insight: not all compute is the same. Matching instance type to workload requirement is one of the fastest and cheapest cost improvements available.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Track complete! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Three instance types: On-demand (flexible, full price), Reserved (committed, −40–60%), Spot (interruptible, −60–90%).</li>
+            <li>The PM-relevant question: can this workload be interrupted? Batch jobs, async queues, and ML training are Spot candidates. Live APIs and databases are not.</li>
+            <li>Reserved instances require commitment (1–3 years) — only useful for genuinely sustained workloads. Committing to Reserved for variable or seasonal load wastes money.</li>
+            <li>Spot + auto-scaling is particularly powerful for variable workloads: you pay for work done, not for idle capacity.</li>
+            <li>These optimisations don't change what your product does — they just change what you pay for the same compute.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="pm.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

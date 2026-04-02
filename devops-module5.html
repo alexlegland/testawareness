@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Module 5: Auto-Scaling Tuning — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .asg-config { background: #0d0d1c; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.8; margin: 10px 0; }
+    .cfg-key   { color: #79b8ff; }
+    .cfg-val   { color: #f1b24a; }
+    .cfg-bad   { background: rgba(239,68,68,0.12); border-radius: 3px; padding: 0 3px; color: #ff8080; font-weight: 700; }
+    .cfg-ok    { background: rgba(34,197,94,0.1);  border-radius: 3px; padding: 0 3px; color: #7ee787; font-weight: 700; }
+    .cfg-cmt   { color: #6a737d; font-style: italic; }
+
+    .issue-cards { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+    .issue-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color 0.15s; }
+    .issue-card:hover:not(.open) { border-color: var(--accent); }
+    .issue-card.open { border-color: rgba(108,71,255,0.3); cursor: default; }
+    .ic-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+    .ic-icon  { font-size: 1.3rem; flex-shrink: 0; }
+    .ic-title { font-weight: 700; font-size: 0.88rem; flex: 1; }
+    .ic-cost  { font-weight: 800; font-size: 0.85rem; color: var(--danger); }
+    .ic-hint  { font-size: 0.7rem; color: var(--primary); font-weight: 600; white-space: nowrap; }
+    .ic-body  { display: none; padding: 0 16px 14px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 0.8rem; line-height: 1.65; color: var(--text-muted); }
+    .issue-card.open .ic-body { display: block; }
+    .issue-card.open .ic-hint { display: none; }
+
+    .slider-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .slider-row:last-child { border-bottom: none; }
+    .slider-label { flex: 1; font-size: 0.84rem; }
+    .slider-label span { display: block; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+    .slider-input { width: 120px; accent-color: var(--primary); }
+    .slider-val { min-width: 60px; text-align: right; font-weight: 700; font-size: 0.85rem; color: var(--accent); }
+    .savings-result { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin: 12px 0; }
+    .sr-before { font-size: 1.1rem; font-weight: 900; color: var(--danger); }
+    .sr-after  { font-size: 1.1rem; font-weight: 900; color: var(--success); }
+
+    .quiz-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .q-opt { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: left; }
+    .q-opt:hover:not(:disabled) { border-color: var(--primary); }
+    .q-opt:disabled { cursor: default; }
+    .q-opt.correct { border-color: var(--success); background: rgba(34,197,94,0.08); color: var(--success); font-weight: 600; }
+    .q-opt.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">DevOps · Module 5 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var issuesOpened = 0;
+var ISSUE_TOTAL = 4;
+var quizAnswered = false;
+
+// slider state
+var minCap = 20;
+var cooldown = 300;
+var scaleIn = false; // enabled = true
+
+function calcSavings() {
+  // baseline: 20 min instances 24/7 at $0.096/hr (m5.large)
+  // optimised: reduced min + faster scale-in
+  var baselineCost = minCap * 0.096 * 720;
+  var optimisedMin = Math.max(2, Math.round(minCap * 0.25));
+  // with faster cooldown, average capacity lower during quiet periods
+  var savingsFactor = 0.55; // rough model: typically ~40-60% saving
+  var optimisedCost = baselineCost * (1 - savingsFactor);
+  return { before: Math.round(baselineCost), after: Math.round(optimisedCost), saving: Math.round(baselineCost - optimisedCost) };
+}
+
+function updateCalc() {
+  var r = calcSavings();
+  document.getElementById('sr-before').textContent = '$' + r.before + '/mo';
+  document.getElementById('sr-after').textContent  = '$' + r.after  + '/mo';
+  document.getElementById('sr-save').textContent   = '$' + r.saving + '/mo saved';
+  document.getElementById('min-val').textContent   = minCap + ' instances';
+  document.getElementById('cd-val').textContent    = cooldown + 's';
+}
+
+function openIssue(id) {
+  var card = document.getElementById('issue-' + id);
+  if (!card || card.classList.contains('open')) return;
+  card.classList.add('open');
+  issuesOpened++;
+  if (issuesOpened >= ISSUE_TOTAL) document.getElementById('issue-next').disabled = false;
+}
+
+function answerQ(idx, correct, pts, correctIdx) {
+  if (quizAnswered) return;
+  quizAnswered = true;
+  if (correct) score += pts;
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b, i) {
+    b.disabled = true;
+    if (i === correctIdx) b.classList.add('correct');
+    else if (i === idx && !correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display = 'block';
+  document.getElementById('q-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 4;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">📈 Auto-Scaling</div>
+        <h2>"Set it and forget it" is the most expensive ASG strategy</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Auto Scaling Groups were configured when the service launched 18 months ago. "Better safe than sorry" was the guiding principle. Nobody has reviewed the configuration since. Traffic patterns, actual load profiles, and instance utilisation have all changed — but the ASG hasn't.</p>
+        <div class="scenario-box">
+          <strong>Current ASG:</strong> Web tier, m5.large instances ($0.096/hr each)<br>
+          Min: <strong>20 instances</strong> · Max: 80 · Desired: 20<br>
+          Scale-out policy: CPU &gt; 70% for 5 minutes → add 5 instances<br>
+          Scale-in policy: disabled ("we got burned once by scale-in latency")<br>
+          Cooldown: 300 seconds<br><br>
+          CloudWatch shows: <strong>average CPU 9%</strong> across the fleet, <strong>24/7</strong>. Peak CPU (5th percentile of hours): 34%.
+        </div>
+        <div class="step-actions">
+          <a href="devops.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Find the issues →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    issuesOpened = 0;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">📈 ASG Review</div>
+        <h2>Four configuration problems — click each to understand the cost</h2>
+        <div class="asg-config">
+<span class="cfg-key">min_size</span>          = <span class="cfg-val cfg-bad">20</span>    <span class="cfg-cmt"># "set for peak, never adjusted"</span>
+<span class="cfg-key">max_size</span>          = <span class="cfg-val">80</span>
+<span class="cfg-key">desired_capacity</span>  = <span class="cfg-val">20</span>
+<span class="cfg-key">scale_out_cooldown</span> = <span class="cfg-val cfg-bad">300</span>   <span class="cfg-cmt"># seconds before next scale action</span>
+<span class="cfg-key">scale_in_enabled</span>  = <span class="cfg-val cfg-bad">false</span>  <span class="cfg-cmt"># disabled after incident 18 months ago</span>
+<span class="cfg-key">scaling_policy</span>    = <span class="cfg-val cfg-bad">"step"</span>  <span class="cfg-cmt"># +5 instances if CPU > 70%</span>
+<span class="cfg-key">metric_window</span>     = <span class="cfg-val cfg-bad">5</span>      <span class="cfg-cmt"># minutes of sustained breach before action</span>
+        </div>
+        <div class="issue-cards">
+          <div class="issue-card" id="issue-0" onclick="openIssue(0)">
+            <div class="ic-header"><span class="ic-icon">📌</span><span class="ic-title">min_size = 20 at 9% avg CPU</span><span class="ic-cost">+$1,244/mo waste</span><span class="ic-hint">Click →</span></div>
+            <div class="ic-body">20 × m5.large × $0.096/hr × 720hr = $1,382/mo baseline cost. At 9% average CPU, the fleet is using ~1.8 vCPU out of 40 total. A minimum of 4–6 instances would handle the baseline load with headroom. 4 instances × $0.096 × 720 = $276/mo. Saving: ~$1,100/mo. The risk is that scale-out takes 60–120 seconds to provision — but with scale-in enabled and predictive scaling or scheduled scaling for known traffic patterns, you can maintain headroom without over-provisioning 24/7.</div>
+          </div>
+          <div class="issue-card" id="issue-1" onclick="openIssue(1)">
+            <div class="ic-header"><span class="ic-icon">🚫</span><span class="ic-title">scale_in_enabled = false</span><span class="ic-cost">Overprovisioned forever</span><span class="ic-hint">Click →</span></div>
+            <div class="ic-body">With scale-in disabled, any scale-out event is permanent until someone manually reduces the fleet. If a traffic spike caused the ASG to scale out to 40 instances six months ago, those 40 instances are still running. Scale-in is safe when configured correctly: use a conservative scale-in policy (CPU &lt; 30% for 10 minutes), instance protection on in-flight connections (connection draining), and a minimum that preserves actual needed capacity. The "incident" that disabled scale-in was likely a misconfigured policy, not scale-in itself.</div>
+          </div>
+          <div class="issue-card" id="issue-2" onclick="openIssue(2)">
+            <div class="ic-header"><span class="ic-icon">⏱️</span><span class="ic-title">Step scaling with 5-min window + 300s cooldown</span><span class="ic-cost">Slow response to real spikes</span><span class="ic-hint">Click →</span></div>
+            <div class="ic-body">Step scaling reacts to threshold breaches: CPU &gt; 70% for 5 minutes → add 5 instances. Then a 300-second cooldown before the next action. During a real traffic spike, this means: 5 minutes of high CPU before any action, then 5 minutes cooldown before potentially scaling out again. Total: 10 minutes to reach needed capacity. <strong>Target tracking scaling</strong> is better: set a target CPU of 50%, and EC2 Auto Scaling continuously adjusts capacity to maintain it. It scales both in and out, responds faster, and doesn't require manual threshold tuning.</div>
+          </div>
+          <div class="issue-card" id="issue-3" onclick="openIssue(3)">
+            <div class="ic-header"><span class="ic-icon">💡</span><span class="ic-title">No Savings Plan coverage on a predictable baseline</span><span class="ic-cost">30–45% on-demand premium</span><span class="ic-hint">Click →</span></div>
+            <div class="ic-body">Even after right-sizing the minimum capacity, the baseline instances (say, 4–6 m5.large running 24/7) should be covered by a Compute Savings Plan. At $0.096/hr on-demand vs. $0.057/hr (1yr Savings Plan): 40% saving on the committed baseline. The burst instances above the baseline should stay on on-demand or Spot (for interruptible burst). A common pattern: Savings Plan covers the minimum fleet; Auto Scaling burst is on-demand; intermittent batch capacity is Spot.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 4 issues to continue</span>
+          <button class="btn btn-primary" id="issue-next" onclick="nextStep()" disabled>See savings model →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    quizAnswered = false;
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 150 pts</div>
+        <h2>You propose switching from step scaling to target tracking (target: 50% CPU). The team pushes back: "What if CPU spikes past 50%? We'll need to over-provision even more." How do you respond?</h2>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: They're right — set the target to 70% to reduce instance count</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Add more instances manually to stay below 50% during peak hours</button>
+          <button class="q-opt" onclick="answerQ(2,true,150,2)">C: Target tracking continuously adjusts capacity to maintain the target — it will scale out proactively, not reactively. It's not a ceiling; it's a control loop.</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Step scaling is more predictable — keep it but lower the threshold to 50%</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Target tracking is a control loop, not a ceiling.</strong> EC2 Auto Scaling continuously monitors CPU and adjusts desired capacity to keep actual CPU near the target. If traffic increases and CPU trends toward 60%, it provisions additional instances before CPU hits 50% consistently. The current step scaling approach with a 5-minute window means the fleet stays at high CPU for 5+ minutes before any action. Target tracking reacts faster and scales down automatically — the combination of faster response and automatic scale-in is what saves money.
+        </div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 150;
+    var badge = score >= 120 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 120 ? 'ASG expert!' : score >= 60 ? 'Good instincts!' : 'Worth reviewing!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>A misconfigured ASG can cost 5–10× what a well-tuned one costs, with no reliability benefit.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Minimum capacity should reflect actual baseline load, not theoretical peak. At 9% average CPU, a min of 20 is 5–10× over-provisioned. Scheduled scaling can handle known daily peaks without a high permanent minimum.</li>
+            <li>Scale-in disabled is a permanent cost tax. Every scale-out event becomes permanent. Properly configured scale-in (conservative threshold, connection draining) is safe and essential.</li>
+            <li>Target tracking scaling is simpler and more responsive than step scaling for most web workloads. It reacts to trends, not threshold breaches — reducing the lag between traffic increase and capacity response.</li>
+            <li>Apply Savings Plans to the stable baseline of the fleet. Keep burst capacity on on-demand or Spot. Never commit Reserved Instances/Savings Plans for the entire max capacity of a variable fleet.</li>
+            <li>ASG configurations drift from the workload over time. Schedule a quarterly review of min/max/desired, utilisation metrics, and scaling policy effectiveness.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="devops.html" class="btn btn-primary">Back to track →</a>
+          <a href="devops-module6.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

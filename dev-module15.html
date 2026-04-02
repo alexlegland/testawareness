@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 15: RDS Proxy &amp; Connection Pooling — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .conn-diagram { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; }
+    .cd-row { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+    .cd-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); width:100%; margin-bottom:2px; }
+    .conn-box { padding:5px 11px; border-radius:7px; font-size:0.75rem; font-weight:700; white-space:nowrap; }
+    .conn-box.lambda { background:rgba(108,71,255,0.12); border:1px solid rgba(108,71,255,0.3); }
+    .conn-box.proxy  { background:rgba(34,197,94,0.12);  border:1px solid rgba(34,197,94,0.3);  color:var(--success); }
+    .conn-box.rds    { background:rgba(255,107,53,0.12); border:1px solid rgba(255,107,53,0.3); color:var(--accent); }
+    .conn-box.bad    { background:rgba(239,68,68,0.12);  border:1px solid rgba(239,68,68,0.3);  color:var(--danger); }
+    .conn-arrow { color:var(--text-muted); font-size:0.9rem; }
+    .conn-cost { font-size:0.7rem; color:var(--accent); font-weight:700; margin-left:auto; }
+
+    .scale-table { width:100%; border-collapse:collapse; font-size:0.8rem; margin:10px 0; }
+    .scale-table th { background:#17172a; padding:8px 12px; text-align:left; font-size:0.69rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .scale-table td { padding:8px 12px; border-bottom:1px solid var(--border); }
+    .scale-table tr:last-child td { border-bottom:none; }
+    .td-bad  { color:var(--danger);  font-weight:700; }
+    .td-good { color:var(--success); font-weight:700; }
+    .td-warn { color:var(--warning); font-weight:700; }
+
+    .option-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .opt-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .opt-card:hover:not(.open){ border-color:var(--primary); }
+    .opt-card.open{ border-color:rgba(108,71,255,0.35); cursor:default; }
+    .oc-head { display:flex; align-items:center; gap:10px; padding:11px 15px; }
+    .oc-icon { font-size:1.1rem; }
+    .oc-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .oc-tag { font-size:0.7rem; font-weight:700; padding:2px 9px; border-radius:20px; }
+    .oc-tag.rec  { background:rgba(34,197,94,0.15); color:var(--success); }
+    .oc-tag.ok   { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .oc-tag.avoid{ background:rgba(239,68,68,0.15);  color:var(--danger); }
+    .oc-body { display:none; padding:0 15px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .opt-card.open .oc-body { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, optOpened=0, OPT_TOTAL=3, quizAnswered=false;
+
+function openOpt(id){
+  var el=document.getElementById('opt-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); optOpened++;
+  if(optOpened>=OPT_TOTAL) document.getElementById('opt-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🔌 Connection Pooling</div>
+        <h2>Lambda scales to 1,000 concurrent — RDS accepts 100 connections. Something has to give.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Relational databases were designed for long-lived server processes that maintain a handful of persistent connections. Lambda was designed to scale to thousands of concurrent invocations, each opening its own connection. The mismatch is one of the most common and expensive mistakes in serverless architecture.</p>
+        <div class="scenario-box">
+          <strong>What happens at scale without pooling:</strong><br>
+          — Traffic spike: Lambda concurrency reaches 800<br>
+          — Each Lambda opens a connection to RDS: 800 simultaneous connection attempts<br>
+          — RDS db.t3.medium max connections: ~90<br>
+          — Result: "too many connections" errors → Lambda retries → more connections → cascade<br>
+          — Engineering response: scale up to db.r5.2xlarge ($0.48/hr vs $0.068/hr = <strong style="color:var(--danger)">7× more expensive</strong>) "to handle the load"<br><br>
+          The database wasn't under CPU or memory pressure. It was under <strong>connection pressure</strong> — a fixable application architecture problem, not a hardware problem.
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the numbers →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🔌 Connection Math</div>
+        <h2>Why the naive approach forces expensive RDS over-provisioning</h2>
+        <div class="conn-diagram">
+          <div class="cd-label">Without pooling — direct Lambda → RDS</div>
+          <div class="cd-row">
+            <div class="conn-box lambda">Lambda ×800</div>
+            <span class="conn-arrow">→ 800 conns →</span>
+            <div class="conn-box bad">RDS (max 90 conns)</div>
+            <span class="conn-cost">💥 connection errors</span>
+          </div>
+          <div class="cd-label" style="margin-top:12px">With RDS Proxy</div>
+          <div class="cd-row">
+            <div class="conn-box lambda">Lambda ×800</div>
+            <span class="conn-arrow">→</span>
+            <div class="conn-box proxy">RDS Proxy (pools)</div>
+            <span class="conn-arrow">→ 15 conns →</span>
+            <div class="conn-box rds">RDS (happy)</div>
+            <span class="conn-cost">✅ stable</span>
+          </div>
+        </div>
+        <table class="scale-table">
+          <thead><tr><th>Lambda concurrency</th><th>Direct connections</th><th>Via RDS Proxy</th><th>Smallest viable RDS (direct)</th></tr></thead>
+          <tbody>
+            <tr><td>50</td><td>50</td><td>5–8</td><td class="td-good">db.t3.micro ($0.017/hr)</td></tr>
+            <tr><td>200</td><td>200</td><td>8–12</td><td class="td-warn">db.t3.medium ($0.068/hr)</td></tr>
+            <tr><td>500</td><td>500</td><td>10–18</td><td class="td-bad">db.r5.large ($0.24/hr)</td></tr>
+            <tr><td>1,000</td><td>1,000</td><td>12–25</td><td class="td-bad">db.r5.2xlarge ($0.48/hr)</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:0.8rem;color:var(--text-muted)">RDS Proxy cost: <strong>$0.015/vCPU/hour</strong> of the underlying RDS instance. A db.t3.medium (2 vCPU) proxy = $0.03/hr = ~$22/month. The proxy pays for itself by allowing a db.t3.medium to serve 1,000 Lambda concurrent invocations that would otherwise require a db.r5.2xlarge ($350/month vs $49/month = <strong style="color:var(--success)">$300/month saved</strong>).</p>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Compare solutions →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    optOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🔌 Solution Comparison</div>
+        <h2>Three approaches to the Lambda → RDS connection problem</h2>
+        <div class="option-cards">
+          <div class="opt-card" id="opt-0" onclick="openOpt(0)">
+            <div class="oc-head"><span class="oc-icon">🛡️</span><span class="oc-title">RDS Proxy (managed connection pooling)</span><span class="oc-tag rec">RECOMMENDED</span></div>
+            <div class="oc-body">AWS-managed proxy that sits between Lambda and RDS. Maintains a warm connection pool to the database, multiplexing thousands of Lambda connections onto a small number of real database connections.<br><br>
+            <strong>Cost:</strong> $0.015/vCPU/hr of the attached RDS instance. db.t3.medium = ~$22/month.<br>
+            <strong>Benefit:</strong> RDS instance stays small. Also adds IAM authentication (no DB credentials in env vars), automatic failover (RDS Multi-AZ failover is transparent to Lambda), and connection pinning control.<br>
+            <strong>When to use:</strong> Lambda or containerised apps with variable concurrency connecting to RDS PostgreSQL, MySQL, MariaDB, SQL Server, or Aurora.<br>
+            <strong>Limitation:</strong> Adds ~1–2ms latency per query (usually undetectable). Not supported for RDS Oracle.</div>
+          </div>
+          <div class="opt-card" id="opt-1" onclick="openOpt(1)">
+            <div class="oc-head"><span class="oc-icon">📦</span><span class="oc-title">Application-level pooling (PgBouncer/ProxySQL)</span><span class="oc-tag ok">VALID FOR CONTAINERS</span></div>
+            <div class="oc-body">Self-managed connection pooler running as a sidecar or dedicated service. PgBouncer (PostgreSQL) and ProxySQL (MySQL) are the standard tools.<br><br>
+            <strong>Cost:</strong> ECS task or EC2 instance for the pooler. A t3.micro runs PgBouncer for ~$8/month. More control over pooling modes (session, transaction, statement).<br>
+            <strong>When appropriate:</strong> ECS/EKS where each pod can run a sidecar pooler. Not suitable for Lambda (no persistent process).<br>
+            <strong>PgBouncer modes:</strong> Transaction mode (most efficient, but incompatible with some PostgreSQL features like prepared statements) vs. Session mode (compatible, less efficient pooling). Most apps work with transaction mode — verify before switching.<br>
+            <strong>Gotcha:</strong> Adding a pooler doesn't remove the need to tune <code>max_connections</code> on RDS itself.</div>
+          </div>
+          <div class="opt-card" id="opt-2" onclick="openOpt(2)">
+            <div class="oc-head"><span class="oc-icon">🔄</span><span class="oc-title">Switch to a connection-friendly database</span><span class="oc-tag ok">ARCHITECTURAL SOLUTION</span></div>
+            <div class="oc-body">If connection management is a persistent operational burden, the root question is: should this workload use a relational database at all?<br><br>
+            <strong>Aurora Serverless v2:</strong> Handles connection scaling better than provisioned RDS (built-in connection pooler). Also scales compute down to 0.5 ACU when idle — good for variable workloads.<br>
+            <strong>DynamoDB:</strong> No connection concept — HTTP API, unlimited concurrent access. If the data model allows key-value or document access patterns, eliminates the connection problem entirely.<br>
+            <strong>PlanetScale / Neon / Supabase:</strong> Managed Postgres services with built-in connection pooling — often used for serverless-first architectures.<br><br>
+            <strong>When to consider migration:</strong> If you're regularly hitting connection limits despite pooling, or if your RDS maintenance burden is high, the architectural refactor may have a better long-term ROI than continuous operational workarounds.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 3 to continue</span>
+          <button class="btn btn-primary" id="opt-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>Connection-aware!</h2>
+        <div class="results-score">170<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>The most expensive RDS instances in production are often sized for connection count, not CPU or memory. A $22/month RDS Proxy can unlock $300+/month in DB downsizing.</p>
+        <div class="xp-gained">🏆 +170 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Lambda concurrency × 1 connection/invocation scales to connection exhaustion fast. A Lambda function that "works fine" at 50 concurrent will cascade-fail at 200 without pooling.</li>
+          <li>RDS Proxy costs $0.015/vCPU/hr of the attached instance — usually $15–$50/month. It pays for itself immediately if it lets you use a smaller RDS instance class.</li>
+          <li>Teams often scale up RDS instance size to fix "too many connections" errors. This treats the symptom, not the cause. The instance has headroom on CPU and memory — it's connection slots that are exhausted.</li>
+          <li>RDS Proxy also adds IAM authentication (removes DB credentials from Lambda env vars) and transparent Multi-AZ failover. The security and reliability benefits often justify it independently of cost.</li>
+          <li>For containerised apps (ECS/EKS), a PgBouncer sidecar gives more pooling mode control at lower cost than RDS Proxy. Choose based on your compute model and operational preference.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Back to track →</a>
+          <a href="dev-module16.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 44px; width:100%; max-width:420px; box-shadow:0 24px 64px rgba(0,0,0,0.4); }
+    .auth-logo { display:flex; align-items:center; gap:10px; font-size:1.2rem; font-weight:800; margin-bottom:32px; }
+    .auth-logo .logo-icon { font-size:1.6rem; }
+    h1 { font-size:1.5rem; font-weight:800; margin-bottom:6px; }
+    .auth-sub { color:var(--text-muted); font-size:0.88rem; margin-bottom:28px; }
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:0.78rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+    .form-group input { width:100%; padding:11px 14px; background:var(--surface2); border:1.5px solid var(--border); border-radius:10px; color:var(--text); font-size:0.92rem; font-family:inherit; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+    .form-group input:focus { border-color:var(--primary); }
+    .auth-btn { width:100%; padding:13px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:0.95rem; font-weight:700; cursor:pointer; margin-top:8px; transition:opacity 0.15s; }
+    .auth-btn:hover { opacity:0.9; }
+    .auth-btn:disabled { opacity:0.5; cursor:default; }
+    .auth-error { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:10px 14px; color:var(--danger); font-size:0.82rem; margin-bottom:14px; display:none; }
+    .auth-link { text-align:center; margin-top:20px; font-size:0.84rem; color:var(--text-muted); }
+    .auth-link a { color:var(--primary); text-decoration:none; font-weight:600; }
+    .auth-link a:hover { text-decoration:underline; }
+    hr { border:none; border-top:1px solid var(--border); margin:24px 0; }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="auth-logo"><span class="logo-icon">💸</span> FinOps Academy</div>
+    <h1>Welcome back</h1>
+    <p class="auth-sub">Sign in to continue your FinOps training.</p>
+    <div class="auth-error" id="error-msg"></div>
+    <form id="login-form" onsubmit="doLogin(event)">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="you@company.com" required autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password" />
+      </div>
+      <button type="submit" class="auth-btn" id="login-btn">Sign in →</button>
+    </form>
+    <hr />
+    <div class="auth-link">New to FinOps Academy? <a href="signup.html">Create your organisation →</a></div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    // Redirect if already logged in
+    FinOpsAuth.getCurrentUser().then(function(user) {
+      if (user) window.location.href = 'index.html';
+    });
+
+    async function doLogin(e) {
+      e.preventDefault();
+      var btn = document.getElementById('login-btn');
+      var err = document.getElementById('error-msg');
+      btn.disabled = true; btn.textContent = 'Signing in…';
+      err.style.display = 'none';
+      var result = await FinOpsAuth.login(
+        document.getElementById('email').value,
+        document.getElementById('password').value
+      );
+      if (result.error) {
+        err.textContent = result.error;
+        err.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Sign in →';
+      } else {
+        window.location.href = 'index.html';
+      }
+    }
+  </script>
+</body>
+</html>

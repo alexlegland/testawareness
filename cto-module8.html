@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 8: Building the FinOps Roadmap — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .roadmap-phases { display:flex; flex-direction:column; gap:12px; margin:14px 0; }
+    .phase-row { display:flex; gap:0; border-radius:12px; overflow:hidden; border:2px solid var(--border); }
+    .phase-label { background:var(--surface2); padding:12px 14px; min-width:90px; display:flex; flex-direction:column; justify-content:center; border-right:1px solid var(--border); }
+    .pl-name { font-weight:800; font-size:0.8rem; }
+    .pl-period { font-size:0.7rem; color:var(--text-muted); }
+    .phase-items { flex:1; padding:11px 14px; display:flex; flex-direction:column; gap:6px; }
+    .pi-row { display:flex; align-items:center; gap:8px; font-size:0.79rem; }
+    .pi-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .pi-dot.quick { background:var(--success); }
+    .pi-dot.medium { background:var(--warning); }
+    .pi-dot.hard { background:var(--danger); }
+    .pi-saving { font-weight:700; color:var(--accent); font-size:0.75rem; margin-left:auto; white-space:nowrap; }
+
+    .initiative-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .init-card { background:var(--surface2); border:2px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .init-card:hover:not(.open){ border-color:var(--primary); }
+    .init-card.open{ border-color:rgba(108,71,255,0.3); cursor:default; }
+    .init-head { display:flex; align-items:center; gap:10px; padding:11px 14px; }
+    .ih-icon { font-size:1.1rem; }
+    .ih-title { flex:1; font-weight:700; font-size:0.85rem; }
+    .ih-effort { font-size:0.72rem; padding:2px 8px; border-radius:20px; font-weight:700; white-space:nowrap; }
+    .ih-effort.quick { background:rgba(34,197,94,0.15); color:var(--success); }
+    .ih-effort.medium { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .ih-effort.hard { background:rgba(239,68,68,0.15); color:var(--danger); }
+    .init-body { display:none; padding:0 14px 12px; border-top:1px solid var(--border); padding-top:10px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .init-card.open .init-body { display:block; }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, initOpened=0, INIT_TOTAL=5, quizAnswered=false;
+
+function openInit(id){
+  var el=document.getElementById('init-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); initOpened++;
+  if(initOpened>=INIT_TOTAL) document.getElementById('init-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">📋 FinOps Roadmap</div>
+        <h2>FinOps isn't a project. It's a capability you build over 12 months.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Most FinOps programs fail because they start with the wrong thing: cost-cutting without cost visibility. You can't optimise what you can't see. The 12-month roadmap has a predictable shape: visibility first, then quick wins, then structural changes, then cultural embedding.</p>
+        <div class="scenario-box">
+          <strong>Your starting point:</strong><br>
+          — Engineering: 80 people, 12 teams<br>
+          — Cloud spend: $520,000/month (AWS, 94% of total)<br>
+          — Tagging coverage: 18% of resources<br>
+          — Current savings programs: none (all on-demand)<br>
+          — FinOps maturity: "Crawl" phase — cost data exists but no one owns it<br><br>
+          Target: move to "Walk" by month 6, "Run" by month 12. Estimated recoverable: 25–35% of current spend = $130K–$182K/month.
+        </div>
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the roadmap →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📋 12-Month Roadmap</div>
+        <h2>The phased plan — savings accumulate, culture shifts</h2>
+        <div class="roadmap-phases">
+          <div class="phase-row">
+            <div class="phase-label"><div class="pl-name">Phase 1</div><div class="pl-period">Months 1–2</div></div>
+            <div class="phase-items">
+              <div class="pi-row"><span class="pi-dot quick"></span>Deploy tagging policy + enforcement via AWS Config<span class="pi-saving">no saving yet</span></div>
+              <div class="pi-row"><span class="pi-dot quick"></span>Enable Cost Explorer + team-level billing dashboards<span class="pi-saving">no saving yet</span></div>
+              <div class="pi-row"><span class="pi-dot quick"></span>Identify and terminate zombie resources (unused EIPs, idle ELBs)<span class="pi-saving">~$8K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot quick"></span>Set billing alerts per team ($X/month thresholds)<span class="pi-saving">behavioural</span></div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-label"><div class="pl-name">Phase 2</div><div class="pl-period">Months 3–4</div></div>
+            <div class="phase-items">
+              <div class="pi-row"><span class="pi-dot quick"></span>Purchase 1-year Compute Savings Plans (baseline EC2/Fargate)<span class="pi-saving">~$78K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot medium"></span>Purchase 1-year RDS Reserved Instances for steady databases<span class="pi-saving">~$22K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot medium"></span>Right-size dev/staging environments (stop nights/weekends)<span class="pi-saving">~$18K/mo</span></div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-label"><div class="pl-name">Phase 3</div><div class="pl-period">Months 5–8</div></div>
+            <div class="phase-items">
+              <div class="pi-row"><span class="pi-dot medium"></span>Migrate to multi-account structure (AWS Organizations)<span class="pi-saving">structural</span></div>
+              <div class="pi-row"><span class="pi-dot medium"></span>Implement S3 lifecycle policies + Intelligent-Tiering<span class="pi-saving">~$12K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot medium"></span>Container image cleanup + ECR lifecycle policies<span class="pi-saving">~$4K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot hard"></span>K8s resource request right-sizing (VPA recommendations)<span class="pi-saving">~$19K/mo</span></div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-label"><div class="pl-name">Phase 4</div><div class="pl-period">Months 9–12</div></div>
+            <div class="phase-items">
+              <div class="pi-row"><span class="pi-dot hard"></span>Unit economics dashboards (cost per customer, per API call)<span class="pi-saving">insight layer</span></div>
+              <div class="pi-row"><span class="pi-dot hard"></span>Chargeback model: teams own their cloud budget<span class="pi-saving">cultural</span></div>
+              <div class="pi-row"><span class="pi-dot hard"></span>Anomaly detection + automated remediation (Lambda scheduler)<span class="pi-saving">~$9K/mo</span></div>
+              <div class="pi-row"><span class="pi-dot hard"></span>3-year Reserved Instances for committed baseline<span class="pi-saving">additional 20%</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Examine key initiatives →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    initOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">📋 Initiative Deep-Dives</div>
+        <h2>Five initiatives CTO must own personally — click each</h2>
+        <div class="initiative-cards">
+          <div class="init-card" id="init-0" onclick="openInit(0)">
+            <div class="init-head"><span class="ih-icon">🏷️</span><span class="ih-title">The tagging policy — why it's the CTO's job, not the DevOps team's</span><span class="ih-effort quick">Months 1–2</span></div>
+            <div class="init-body">Tagging is a cultural and political problem, not a technical one. Every team has a reason why their resources "can't" be tagged: legacy infrastructure, third-party deployments, time pressure. Without CTO mandate, exceptions multiply.<br><br>What effective looks like: a <strong>tagging policy with teeth</strong> — AWS Config rules that flag untagged resources as "non-compliant," a weekly report to team leads showing their coverage %, and a hard deadline after which untagged resources are scheduled for automated shutdown. The CTO signs the email. That's what makes it happen. Target: 90%+ coverage within 60 days.</div>
+          </div>
+          <div class="init-card" id="init-1" onclick="openInit(1)">
+            <div class="init-head"><span class="ih-icon">💳</span><span class="ih-title">Savings Plans timing — the biggest single lever</span><span class="ih-effort quick">Month 3</span></div>
+            <div class="init-body">At $520K/month with 0% commitment purchases, you're leaving ~$78K/month on the table. A 1-year Compute Savings Plan covering 60% of your baseline EC2/Fargate spend: immediate 35–40% discount on covered hours.<br><br>The decision: what percentage of baseline to commit? Conservative (50% of baseline): lower savings but minimal risk of overcommitment. Aggressive (80%): maximum savings but limited flexibility if engineering pivots technology stack. Standard recommendation: 60–70% of 3-month average baseline. The CTO should own this decision, not delegate it — it's a $5–6M annual commitment and shapes infrastructure flexibility for the next year.</div>
+          </div>
+          <div class="init-card" id="init-2" onclick="openInit(2)">
+            <div class="init-head"><span class="ih-icon">💰</span><span class="ih-title">Unit economics: connecting cloud cost to business output</span><span class="ih-effort hard">Month 9</span></div>
+            <div class="init-body">The endgame metric isn't "we spend $X on cloud" — it's "we spend $Y per active customer per month" or "cloud cost per API transaction is $Z." These unit economics tie infrastructure investment to revenue and make cost conversations constructive instead of adversarial.<br><br>Building this requires: tagged spend by product line, linked to revenue or usage data (from your product analytics). The first version is rough — order-of-magnitude numbers. But once visible, it changes how engineering debates features. "This change adds $0.003/user/month" is a tractable discussion. "Cloud costs went up 8%" is not. The CTO must champion this as a product metric, not a finance metric.</div>
+          </div>
+          <div class="init-card" id="init-3" onclick="openInit(3)">
+            <div class="init-head"><span class="ih-icon">🏦</span><span class="ih-title">Chargeback vs. showback — which model to use</span><span class="ih-effort hard">Month 10</span></div>
+            <div class="init-body"><strong>Showback:</strong> teams see their cloud costs but don't "pay" them from a team budget. Lower friction, builds awareness, no financial accountability mechanism.<br><br><strong>Chargeback:</strong> cloud cost is allocated to team P&Ls or budgets. Teams are accountable. More behavior change, but can create perverse incentives (teams under-invest in reliability to save cost).<br><br>Most companies operate showback for the first 12–18 months and introduce chargeback selectively (e.g., for large spenders or distinct product lines). The CTO must decide: is the goal awareness or financial accountability? The answer shapes the roadmap's cultural phase. Neither model works without accurate tagging — which is why tagging comes first.</div>
+          </div>
+          <div class="init-card" id="init-4" onclick="openInit(4)">
+            <div class="init-head"><span class="ih-icon">📊</span><span class="ih-title">The board metric: gross margin improvement</span><span class="ih-effort medium">Ongoing</span></div>
+            <div class="init-body">FinOps programs need a board-level narrative, not just a cost-savings spreadsheet. The metric that matters to the board and investors is <strong>gross margin</strong>. Cloud is part of COGS. Recovering $150K/month on $520K spend = 29% cloud cost reduction = 3–4 gross margin points on a $52M ARR business — that's material.<br><br>Frame every FinOps initiative as a gross margin contribution. "Savings Plans: +1.8 gross margin points." "K8s right-sizing: +0.4 gross margin points." This connects engineering decisions to the P&L in language the board understands, and creates a clear ROI narrative for investing in platform engineering headcount dedicated to FinOps.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 5 to continue</span>
+          <button class="btn btn-primary" id="init-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>FinOps leader!</h2>
+        <div class="results-score">200<span style="font-size:2rem;color:var(--text-muted)">/200</span></div>
+        <p>A FinOps roadmap is an engineering strategy document. The CTO who can translate cloud spend into gross margin tells the board a story that resonates beyond the server room.</p>
+        <div class="xp-gained">🏆 +200 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Phase sequencing matters: visibility before optimisation, quick wins before structural changes. Don't start with multi-account migration — start with tagging and Savings Plans.</li>
+          <li>The biggest single lever is almost always Savings Plans/Reserved Instances — available in month 3, no engineering required. This funds everything else politically.</li>
+          <li>Tagging is a cultural mandate, not a technical task. It requires CTO authority and enforcement mechanisms. Without it, nothing else — chargeback, unit economics, anomaly detection — is possible.</li>
+          <li>Unit economics (cost per customer, per transaction) transform FinOps from a cost-cutting program to a product discipline. Engineering teams respond to "cost per user" differently than "cloud bill went up."</li>
+          <li>Frame everything for the board in gross margin terms. A 3-point gross margin improvement on $50M ARR is worth more than "we saved $1.5M on cloud." Same number, different conversation.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CTO Module 3: Build vs. Buy — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .tco-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; }
+    @media (max-width:500px) { .tco-grid { grid-template-columns:1fr; } }
+    .tco-col { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .tco-col.build { border-color:rgba(108,71,255,0.3); }
+    .tco-col.buy   { border-color:rgba(34,197,94,0.3); }
+    .tco-header { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:12px; }
+    .tco-header.build { color:var(--primary); }
+    .tco-header.buy   { color:var(--success); }
+    .tco-line { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.82rem; }
+    .tco-line:last-child { border-bottom:none; font-weight:700; }
+    .tco-line .lbl { color:var(--text-muted); }
+    .tco-verdict { margin-top:8px; font-size:0.8rem; font-weight:700; padding:6px 10px; border-radius:8px; text-align:center; }
+    .tco-verdict.win  { background:rgba(34,197,94,0.12); color:var(--success); }
+    .tco-verdict.lose { background:rgba(239,68,68,0.12); color:var(--danger); }
+    .tco-verdict.tie  { background:rgba(245,158,11,0.12); color:var(--warning); }
+
+    .decision-opts { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .dec-opt { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:15px 18px; cursor:pointer; transition:all 0.15s; }
+    .dec-opt:hover:not(.locked) { border-color:var(--primary); }
+    .dec-opt.locked { cursor:default; }
+    .dec-opt.good { border-color:var(--success); background:rgba(34,197,94,0.06); }
+    .dec-opt.ok   { border-color:var(--warning); background:rgba(245,158,11,0.06); }
+    .dec-opt.bad  { border-color:var(--danger);  background:rgba(239,68,68,0.06); }
+    .do-title  { font-weight:700; font-size:0.92rem; margin-bottom:4px; }
+    .do-sub    { font-size:0.8rem; color:var(--text-muted); }
+    .do-reveal { display:none; margin-top:10px; padding:10px 14px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.82rem; line-height:1.6; }
+    .dec-opt.good .do-reveal,
+    .dec-opt.ok   .do-reveal,
+    .dec-opt.bad  .do-reveal { display:block; }
+
+    .case-tabs { display:flex; gap:8px; margin-bottom:12px; }
+    .case-tab { background:var(--surface2); border:2px solid var(--border); border-radius:8px; padding:7px 16px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; }
+    .case-tab.active { border-color:var(--primary); background:rgba(108,71,255,0.1); color:var(--primary); }
+    .case-content { display:none; }
+    .case-content.active { display:block; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">CTO · Module 3 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var activeCase = 0;
+var decisionMade = false;
+
+function switchCase(idx) {
+  activeCase = idx;
+  document.querySelectorAll('.case-tab').forEach(function(t, i) { t.classList.toggle('active', i === idx); });
+  document.querySelectorAll('.case-content').forEach(function(c, i) { c.classList.toggle('active', i === idx); });
+}
+
+function choose(idx) {
+  if (decisionMade) return;
+  decisionMade = true;
+  var outcomes = ['bad','good','ok'];
+  var pts      = [0, 170, 85];
+  score += pts[idx];
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.querySelectorAll('.dec-opt').forEach(function(c) { c.classList.add('locked'); });
+  var card = document.getElementById('dec-' + idx);
+  card.classList.add(outcomes[idx]);
+  document.getElementById('dec-next').disabled = false;
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">⚖️ Build vs. Buy</div>
+        <h2>The real cost of building it yourself</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          "We can build that in-house for less" is one of the most expensive statements in engineering. The managed service price is visible. The cost of building is often not.
+        </p>
+        <p style="font-weight:600;margin-bottom:10px">Three real cases — click each to see the TCO comparison:</p>
+
+        <div class="case-tabs">
+          <button class="case-tab active" onclick="switchCase(0)">Search</button>
+          <button class="case-tab" onclick="switchCase(1)">Monitoring</button>
+          <button class="case-tab" onclick="switchCase(2)">Data Warehouse</button>
+        </div>
+
+        <div class="case-content active">
+          <div class="tco-grid">
+            <div class="tco-col build">
+              <div class="tco-header build">🔨 Build — Self-hosted Elasticsearch</div>
+              <div class="tco-line"><span class="lbl">EC2 (2× m5.large, HA)</span><span>$140/mo</span></div>
+              <div class="tco-line"><span class="lbl">EBS storage (500GB)</span><span>$50/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering maintenance</span><span>$800/mo</span></div>
+              <div class="tco-line"><span class="lbl">Upgrades, incidents, tuning</span><span>$400/mo</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$1,390/mo</span></div>
+              <div class="tco-line"><span class="lbl">3-year TCO</span><span>$50,040</span></div>
+              <div class="tco-verdict lose">❌ 3.7× more expensive</div>
+            </div>
+            <div class="tco-col buy">
+              <div class="tco-header buy">📦 Buy — Amazon OpenSearch (managed)</div>
+              <div class="tco-line"><span class="lbl">2× m5.large.search nodes</span><span>$280/mo</span></div>
+              <div class="tco-line"><span class="lbl">Storage</span><span>$50/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering time (ops)</span><span>$50/mo</span></div>
+              <div class="tco-line"><span class="lbl">Updates, patches (automated)</span><span>$0</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$380/mo</span></div>
+              <div class="tco-line"><span class="lbl">3-year TCO</span><span>$13,680</span></div>
+              <div class="tco-verdict win">✅ Correct choice at this scale</div>
+            </div>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.6">Engineering maintenance: ~6h/month for a backend engineer at a $150/hr fully-loaded cost. Upgrades, incident response, capacity planning, index management. The self-hosted option only wins if you need custom Elasticsearch plugins or have scale needs that exceed managed offerings.</p>
+        </div>
+
+        <div class="case-content">
+          <div class="tco-grid">
+            <div class="tco-col build">
+              <div class="tco-header build">🔨 Build — Self-hosted Prometheus + Grafana</div>
+              <div class="tco-line"><span class="lbl">EC2 (t3.xlarge)</span><span>$120/mo</span></div>
+              <div class="tco-line"><span class="lbl">Storage (metrics retention)</span><span>$80/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering (setup + maint.)</span><span>$600/mo</span></div>
+              <div class="tco-line"><span class="lbl">On-call incidents</span><span>$200/mo</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$1,000/mo</span></div>
+              <div class="tco-verdict tie">⚖️ Comparable — depends on scale</div>
+            </div>
+            <div class="tco-col buy">
+              <div class="tco-header buy">📦 Buy — Datadog / Grafana Cloud</div>
+              <div class="tco-line"><span class="lbl">15 hosts × $15/host</span><span>$225/mo</span></div>
+              <div class="tco-line"><span class="lbl">Custom metrics</span><span>$100/mo</span></div>
+              <div class="tco-line"><span class="lbl">Log ingestion</span><span>$150/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering (config only)</span><span>$50/mo</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$525/mo</span></div>
+              <div class="tco-verdict win">✅ Less maintenance, faster setup</div>
+            </div>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.6">Monitoring is one area where self-hosted can be cost-competitive at scale (large Datadog bills are common). The tradeoff is engineering time to maintain the stack. Many teams run self-hosted Prometheus for metrics and buy a managed log aggregation product.</p>
+        </div>
+
+        <div class="case-content">
+          <div class="tco-grid">
+            <div class="tco-col build">
+              <div class="tco-header build">🔨 Build — Self-hosted PostgreSQL as warehouse</div>
+              <div class="tco-line"><span class="lbl">RDS r5.2xlarge (HA)</span><span>$720/mo</span></div>
+              <div class="tco-line"><span class="lbl">Storage (2TB, grows)</span><span>$230/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering (ETL + maint.)</span><span>$1,500/mo</span></div>
+              <div class="tco-line"><span class="lbl">Query performance tuning</span><span>$500/mo</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$2,950/mo</span></div>
+              <div class="tco-verdict lose">❌ Wrong tool for the job</div>
+            </div>
+            <div class="tco-col buy">
+              <div class="tco-header buy">📦 Buy — BigQuery / Redshift / Snowflake</div>
+              <div class="tco-line"><span class="lbl">Storage (2TB)</span><span>$40/mo</span></div>
+              <div class="tco-line"><span class="lbl">Query compute (on-demand)</span><span>$200/mo</span></div>
+              <div class="tco-line"><span class="lbl">Engineering (queries + models)</span><span>$300/mo</span></div>
+              <div class="tco-line"><span class="lbl">Columnar compression benefit</span><span>−$0</span></div>
+              <div class="tco-line"><span class="lbl">Total (monthly)</span><span>$540/mo</span></div>
+              <div class="tco-verdict win">✅ 5× cheaper, built for analytics</div>
+            </div>
+          </div>
+          <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.6">PostgreSQL is a great OLTP database. It's a poor analytical data warehouse. Purpose-built warehouses (BigQuery, Redshift, Snowflake) use columnar storage and separate compute from storage — dramatically cheaper and faster for aggregation queries at scale. This is arguably the most common CTO cost mistake.</p>
+        </div>
+
+        <div class="step-actions">
+          <a href="cto.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Make the call →</button>
+        </div>
+      </div>`;
+    setTimeout(function() { switchCase(0); }, 0);
+
+  } else if (currentStep === 1) {
+    decisionMade = false;
+    var opts = [
+      { title: '① Build it — the managed service is too expensive at scale', sub: 'Engineering estimates $380/mo now. At 10× scale that\'s $3,800/mo vs. self-hosted.', reveal: 'Scaling the managed cost linearly is a common mistake. Managed services often have volume discounts and the engineering cost of maintaining a self-hosted equivalent also scales with load (more indices to manage, more capacity planning, more incidents). The self-hosted cost at 10× scale would also be much higher than today.' },
+      { title: '② Buy the managed service — our engineers should work on product', sub: '$380/mo vs. $1,390/mo self-hosted. 3-year TCO difference: $36K.', reveal: 'For most teams at this scale, this is correct. Managed services eliminate operational burden — upgrades, patches, HA configuration, backup management. The $36K 3-year TCO difference doesn\'t account for opportunity cost: what could your engineers build with the 6h/month they\'d spend maintaining Elasticsearch?' },
+      { title: '③ Self-host for now, migrate to managed when costs become painful', sub: 'Start cheap, optimise later.', reveal: '"Migrate later" is expensive and rarely happens on schedule. Self-hosting creates operational habits, custom configuration, and institutional knowledge that make migration hard. The time to make the build vs. buy decision is before you build, not after you\'ve run something for 2 years.' }
+    ];
+
+    var cards = opts.map(function(o, i) {
+      return '<div class="dec-opt" id="dec-' + i + '" onclick="choose(' + i + ')">' +
+        '<div class="do-title">' + o.title + '</div>' +
+        '<div class="do-sub">' + o.sub + '</div>' +
+        '<div class="do-reveal">' + o.reveal + '</div>' +
+      '</div>';
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type scenario">🎯 Decision — up to 170 pts</div>
+        <h2>Engineering wants to self-host search. What do you decide?</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">
+          You're a 40-person startup. Engineering proposes self-hosting Elasticsearch on EC2 to "save money" vs. Amazon OpenSearch ($380/mo). You've seen the TCO numbers.
+        </p>
+        <div class="decision-opts">${cards}</div>
+        <div class="step-actions">
+          <span></span>
+          <button class="btn btn-primary" id="dec-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 2) {
+    var max = 170;
+    var pct = Math.round((score / max) * 100);
+    var badge, headline, desc;
+    if (pct >= 75)     { badge = '🏆'; headline = 'TCO-fluent CTO!'; desc = 'You looked past the sticker price and calculated what it actually costs to operate. That\'s the build vs. buy skill.'; }
+    else if (pct >= 40){ badge = '🎯'; headline = 'Good instincts!'; desc = 'The key insight: the managed service price is visible, but the engineering time to maintain self-hosted is usually invisible — and almost always more expensive.'; }
+    else               { badge = '📚'; headline = 'Keep building!'; desc = 'Build vs. buy is almost never about the raw infra cost. It\'s about total cost of ownership: infra + engineering time + incident cost + opportunity cost.'; }
+
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>${desc}</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Managed service cost is visible. Engineering maintenance cost (6–10h/month per system) is usually invisible until you account for it.</li>
+            <li>At a fully-loaded engineer cost of $100–150/hr, 6h/month of maintenance = $600–900/mo. Most managed services cost less than this.</li>
+            <li>Managed services win most build vs. buy decisions below $5K/month. The crossover happens when you hit usage volumes that exceed managed pricing tiers or need custom capabilities the managed service doesn't offer.</li>
+            <li>Using PostgreSQL as an analytical data warehouse is the single most common CTO infrastructure cost mistake — purpose-built warehouses (BigQuery, Snowflake, Redshift) are significantly cheaper and faster for that use case.</li>
+            <li>"Migrate later" is rarely cheaper. Decide at the start, not after 2 years of operational habits have accumulated.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="cto.html" class="btn btn-primary">Back to track →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

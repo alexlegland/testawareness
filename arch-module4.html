@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arch Module 4: Spot, On-Demand, Reserved — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .classify-grid { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+    .classify-card {
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      transition: border-color 0.15s;
+    }
+    .classify-card.done { border-color: rgba(34,197,94,0.35); }
+    .cc-title { font-weight: 800; font-size: 0.9rem; margin-bottom: 6px; }
+    .cc-tags  { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .cc-tag   { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+    .model-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .model-btn {
+      flex: 1;
+      min-width: 120px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+      transition: all 0.15s;
+      text-align: left;
+      color: var(--text);
+    }
+    .model-btn:hover:not(:disabled) { border-color: var(--primary); }
+    .model-btn:disabled { cursor: default; }
+    .model-btn.correct { border-color: var(--success); background: rgba(34,197,94,0.1); color: var(--success); }
+    .model-btn.wrong   { border-color: var(--danger);  background: rgba(239,68,68,0.08); opacity: 0.6; }
+    .model-btn.reveal  { border-color: var(--success); background: rgba(34,197,94,0.1); color: var(--success); }
+    .cc-explain { display:none; margin-top:10px; padding:10px 12px; background:rgba(0,0,0,0.2); border-radius:8px; font-size:0.78rem; line-height:1.6; color:var(--text-muted); }
+    .cc-explain.show { display:block; }
+
+    .ref-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:14px 0; }
+    @media(max-width:500px){ .ref-grid{grid-template-columns:1fr;} }
+    .ref-card { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+    .rc-title { font-weight:800; font-size:0.9rem; margin-bottom:6px; }
+    .rc-disc  { font-size:1.2rem; font-weight:900; color:var(--accent); margin-bottom:4px; }
+    .rc-rule  { font-size:0.75rem; color:var(--text-muted); line-height:1.5; }
+    .rc-pro   { font-size:0.75rem; color:var(--success); margin-top:6px; }
+    .rc-con   { font-size:0.75rem; color:var(--danger); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Module 4 of 6</span>
+</nav>
+
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 3</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="step-container"></div>
+</main>
+
+<script>
+var currentStep = 0;
+var score = 0;
+var classified = 0;
+var CLASSIFY_TOTAL = 6;
+
+var workloads = [
+  {
+    id: 0,
+    title: 'Customer-facing checkout API',
+    tags: ['24/7', 'SLA: 99.9%', 'Revenue-critical', 'Steady baseline traffic'],
+    correct: 'savings',
+    options: [
+      { label: 'On-Demand', val: 'ondemand' },
+      { label: 'EC2 Savings Plan', val: 'savings' },
+      { label: 'Spot', val: 'spot' },
+      { label: 'Reserved (1yr)', val: 'reserved' }
+    ],
+    explain: 'EC2 Savings Plan is correct. The API runs 24/7 with stable traffic — exactly the profile that benefits from commitments. Savings Plans give 30–66% off on-demand rates with flexibility across instance families and sizes (unlike RIs which are instance-specific). Spot is wrong — checkout must not be interrupted. On-Demand wastes the commitment discount. 1yr Standard Reserved RI would also work but is less flexible than a Savings Plan if you upgrade instance types.'
+  },
+  {
+    id: 1,
+    title: 'Nightly ETL pipeline (4 hrs, can retry)',
+    tags: ['Runs 9pm–1am', 'Interruptible with checkpoints', 'No SLA', 'CPU-intensive'],
+    correct: 'spot',
+    options: [
+      { label: 'On-Demand', val: 'ondemand' },
+      { label: 'EC2 Savings Plan', val: 'savings' },
+      { label: 'Spot (with AWS Batch)', val: 'spot' },
+      { label: 'Reserved (3yr)', val: 'reserved' }
+    ],
+    explain: 'Spot with AWS Batch is the clear winner. The job is nightly, interruptible, and checkpointed — exactly what Spot is designed for. Spot prices for compute-optimised instances average 60–75% below on-demand. At 4 hrs/night × 30 days = 120 hours/month, even a moderate Spot saving of 65% (c5.2xlarge: $0.680 → $0.238/hr) saves ~$53/mo per instance. A 3yr Reserved Instance makes no sense for a 120-hr/month job — you\'d pay for 720 hrs/month in reserved capacity.'
+  },
+  {
+    id: 2,
+    title: 'Dev / staging environment',
+    tags: ['Business hours only', 'Low traffic', 'No SLA', 'Used by 8-person team'],
+    correct: 'scheduled',
+    options: [
+      { label: 'On-Demand (scheduled stop)', val: 'scheduled' },
+      { label: 'EC2 Savings Plan', val: 'savings' },
+      { label: 'Spot', val: 'spot' },
+      { label: 'Reserved (1yr)', val: 'reserved' }
+    ],
+    explain: 'On-Demand with scheduled stop/start wins. Dev instances used only during business hours run ~195 hrs/month vs. 720 hrs/month always-on — 73% less. Spot would be cheaper per hour but devs losing their environment mid-afternoon is disruptive. Savings Plans and Reserved Instances don\'t make sense: you commit to hourly billing whether the instance is running or stopped (Reserved) or pay for a usage profile you don\'t have (Savings Plan on a stopped instance provides no benefit).'
+  },
+  {
+    id: 3,
+    title: 'ML training job (GPU, 6–12 hrs/run, weekly)',
+    tags: ['Runs once a week', 'Takes 6–12 hrs', 'Interruptible', 'p3.8xlarge required'],
+    correct: 'spot',
+    options: [
+      { label: 'On-Demand', val: 'ondemand' },
+      { label: 'EC2 Savings Plan', val: 'savings' },
+      { label: 'Spot', val: 'spot' },
+      { label: 'Reserved (1yr)', val: 'reserved' }
+    ],
+    explain: 'Spot is again correct for GPU training. p3.8xlarge on-demand: $12.24/hr. Spot pricing: ~$3–5/hr average for p3 instances (60–75% off). A 10-hr weekly job costs ~$490/mo on-demand vs. ~$160–200/mo on Spot. GPU spot availability is less reliable than CPU, so have a fallback to on-demand if spot unavailable. Savings Plans don\'t cover GPU instances (EC2 Instance Savings Plans do, but Compute Savings Plans don\'t always). A 1yr Reserved p3 would cost ~$6.10/hr but you\'d pay for 720 hrs/month; the job only runs ~40–48 hrs/month — terrible utilisation.'
+  },
+  {
+    id: 4,
+    title: 'Redis cluster (production caching)',
+    tags: ['24/7', 'Low CPU, high RAM', 'SLA: 99.95%', 'r6g.xlarge, ElastiCache'],
+    correct: 'reserved',
+    options: [
+      { label: 'On-Demand', val: 'ondemand' },
+      { label: 'EC2 Savings Plan', val: 'savings' },
+      { label: 'Spot', val: 'spot' },
+      { label: 'Reserved Node (1yr)', val: 'reserved' }
+    ],
+    explain: 'Reserved Node (ElastiCache Reserved) is correct. ElastiCache is a managed service — Savings Plans don\'t apply. ElastiCache has its own Reserved Node pricing: up to 40% off on-demand for 1yr (no-upfront), up to 57% for 3yr. Spot doesn\'t apply to ElastiCache — it\'s not an EC2 instance. For a 24/7 production cache with no expectation of resizing, a 1yr Reserved Node is the right commitment. Note: Savings Plans (EC2 or Compute) only cover EC2, Fargate, and Lambda — not ElastiCache, RDS, or Redshift. Those services have their own Reserved pricing.'
+  },
+  {
+    id: 5,
+    title: 'Auto-scaling web tier (variable 0–200 instances)',
+    tags: ['Scales 0–200 instances', 'Baseline: 20 instances', 'Traffic spikes unpredictable', 'SLA: 99.9%'],
+    correct: 'hybrid',
+    options: [
+      { label: 'All On-Demand', val: 'ondemand' },
+      { label: 'All Spot', val: 'spot' },
+      { label: 'Savings Plan for baseline + Spot for burst', val: 'hybrid' },
+      { label: 'Reserved 200 instances (worst case)', val: 'reserved' }
+    ],
+    explain: 'Hybrid coverage is the standard pattern for variable-scale workloads. Commit to Savings Plans for the steady baseline (20 instances running 24/7 — well-understood commitment). Use Spot for burst capacity above the baseline — if Spot is unavailable or interrupted, fall back to On-Demand for those instances only, not the whole fleet. Reserving 200 instances would waste commitment on 180 instances that sit idle most of the time. All-Spot risks cascading Spot interruptions during a traffic spike — the worst moment to lose capacity. The Savings Plan + Spot hybrid is a documented AWS best practice for ASG fleets.'
+  }
+];
+
+function pickModel(wId, val) {
+  var w = workloads[wId];
+  var card = document.getElementById('cc-' + wId);
+  var buttons = card.querySelectorAll('.model-btn');
+  buttons.forEach(function(b) { b.disabled = true; });
+  var isCorrect = (val === w.correct);
+  if (isCorrect) {
+    score += 23;
+    buttons.forEach(function(b) { if (b.dataset.val === val) b.classList.add('correct'); });
+  } else {
+    buttons.forEach(function(b) {
+      if (b.dataset.val === val) b.classList.add('wrong');
+      if (b.dataset.val === w.correct) b.classList.add('reveal');
+    });
+  }
+  document.getElementById('score-display').textContent = 'Score: ' + score + ' pts';
+  document.getElementById('ex-' + wId).classList.add('show');
+  card.classList.add('done');
+  classified++;
+  if (classified >= CLASSIFY_TOTAL) {
+    document.getElementById('classify-next').disabled = false;
+  }
+}
+
+function nextStep() { currentStep++; renderStep(); }
+
+function renderStep() {
+  var total = 3;
+  document.getElementById('progress-bar').style.width = Math.round((currentStep / total) * 100) + '%';
+  document.getElementById('step-label').textContent = 'Step ' + (currentStep + 1) + ' of ' + total;
+  var c = document.getElementById('step-container');
+
+  if (currentStep === 0) {
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type tip">💰 Purchasing Models</div>
+        <h2>Three purchasing models — each with a different tradeoff</h2>
+        <div class="ref-grid">
+          <div class="ref-card" style="border-color:rgba(239,68,68,0.25)">
+            <div class="rc-title">⚡ On-Demand</div>
+            <div class="rc-disc">+0%</div>
+            <div class="rc-rule">Pay by the second/hour. No commitment. Available instantly.</div>
+            <div class="rc-pro">✅ Maximum flexibility</div>
+            <div class="rc-con">❌ Most expensive per hour</div>
+          </div>
+          <div class="ref-card" style="border-color:rgba(108,71,255,0.25)">
+            <div class="rc-title">🔒 Savings Plans / RIs</div>
+            <div class="rc-disc">−30–66%</div>
+            <div class="rc-rule">Commit to $/hr spend or specific instance for 1–3 years.</div>
+            <div class="rc-pro">✅ Significant discount on stable workloads</div>
+            <div class="rc-con">❌ You pay whether running or not</div>
+          </div>
+          <div class="ref-card" style="border-color:rgba(34,197,94,0.25)">
+            <div class="rc-title">🎲 Spot Instances</div>
+            <div class="rc-disc">−60–90%</div>
+            <div class="rc-rule">Spare EC2 capacity. 2-min interruption notice. Variable availability.</div>
+            <div class="rc-pro">✅ Massive savings for interruptible work</div>
+            <div class="rc-con">❌ Can be reclaimed at any time</div>
+          </div>
+        </div>
+        <div class="scenario-box">
+          <strong>Savings Plans vs. Reserved Instances:</strong> Savings Plans are more flexible — you commit to a $/hr spend level, and the discount applies across instance families, sizes, and even regions (Compute Savings Plans). Standard Reserved Instances commit to a specific instance type and region but can give slightly higher discounts. For most teams, Savings Plans are simpler to manage.<br><br>
+          <strong>Note:</strong> Savings Plans cover EC2, Fargate, and Lambda. Managed services (RDS, ElastiCache, Redshift) have their own Reserved pricing — Savings Plans don't apply to them.
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Classify 6 workloads →</button>
+        </div>
+      </div>`;
+
+  } else if (currentStep === 1) {
+    classified = 0;
+    var html = workloads.map(function(w) {
+      var tagsHtml = w.tags.map(function(t) { return '<span class="cc-tag">' + t + '</span>'; }).join('');
+      var optsHtml = w.options.map(function(o) {
+        return '<button class="model-btn" data-val="' + o.val + '" onclick="pickModel(' + w.id + ',\'' + o.val + '\')">' + o.label + '</button>';
+      }).join('');
+      return `<div class="classify-card" id="cc-${w.id}">
+        <div class="cc-title">${w.title}</div>
+        <div class="cc-tags">${tagsHtml}</div>
+        <div class="model-row">${optsHtml}</div>
+        <div class="cc-explain" id="ex-${w.id}">${w.explain}</div>
+      </div>`;
+    }).join('');
+
+    c.innerHTML = `
+      <div class="step-card">
+        <div class="step-type challenge">💰 Classify — ~23 pts each</div>
+        <h2>Pick the right purchasing model for each workload</h2>
+        <p style="color:var(--text-muted);margin-bottom:10px">Use the workload characteristics to choose. Then read the explanation.</p>
+        <div class="classify-grid">${html}</div>
+        <div class="step-actions" style="margin-top:16px">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Classify all 6 to continue</span>
+          <button class="btn btn-primary" id="classify-next" onclick="nextStep()" disabled>See results →</button>
+        </div>
+      </div>`;
+
+  } else {
+    var max = 140;
+    var badge = score >= 115 ? '🏆' : score >= 60 ? '🎯' : '📚';
+    var headline = score >= 115 ? 'Purchasing model expert!' : score >= 60 ? 'Good coverage!' : 'Worth reviewing!';
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('step-label').textContent = 'Completed! 🎉';
+    c.innerHTML = `
+      <div class="step-card results-card">
+        <div class="results-badge">${badge}</div>
+        <h2>${headline}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/${max}</span></div>
+        <p>Matching purchasing model to workload characteristics is one of the highest-leverage FinOps decisions. A well-structured fleet uses all three models.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways">
+          <h3>Key Takeaways</h3>
+          <ul>
+            <li>Steady 24/7 workloads with known instance profiles → Savings Plans or Reserved Instances (30–66% discount). The longer the commitment and the less upfront flexibility, the higher the discount.</li>
+            <li>Interruptible batch, ML training, ETL → Spot Instances (60–90% discount). Use AWS Batch, checkpointing, or Spot-aware frameworks to handle interruption gracefully.</li>
+            <li>Variable-scale fleets → commit a baseline with Savings Plans, use Spot for burst, fall back to On-Demand if Spot unavailable. This is the standard ASG pattern.</li>
+            <li>Savings Plans don't cover managed services (RDS, ElastiCache, Redshift). Those services have their own Reserved pricing that's separate and worth using for steady workloads.</li>
+            <li>Dev/staging → On-Demand with scheduled stop/start. Never Reserved (you pay for idle hours). Spot is cheap but disruptive when interrupted mid-workday.</li>
+          </ul>
+        </div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module5.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Module 8: EDP Negotiation — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .edp-lever-cards { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .lever-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+    .lever-card:hover:not(.open){ border-color:var(--accent); }
+    .lever-card.open{ border-color:rgba(255,107,53,0.35); cursor:default; }
+    .lc-head { display:flex; align-items:center; gap:10px; padding:12px 15px; }
+    .lc-icon { font-size:1.2rem; flex-shrink:0; }
+    .lc-title { flex:1; font-weight:700; font-size:0.86rem; }
+    .lc-impact { font-size:0.72rem; font-weight:700; padding:2px 9px; border-radius:20px; }
+    .lc-impact.high { background:rgba(34,197,94,0.15); color:var(--success); }
+    .lc-impact.medium { background:rgba(245,158,11,0.15); color:var(--warning); }
+    .lc-impact.low { background:rgba(108,71,255,0.15); color:var(--primary); }
+    .lc-body { display:none; padding:0 15px 13px; border-top:1px solid var(--border); padding-top:11px; font-size:0.79rem; line-height:1.65; color:var(--text-muted); }
+    .lever-card.open .lc-body { display:block; }
+
+    .edp-calc { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 18px; margin:12px 0; font-size:0.84rem; }
+    .calc-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); }
+    .calc-row:last-child { border-bottom:none; font-weight:800; }
+    .calc-row.total { padding-top:10px; margin-top:4px; }
+    .calc-val { font-weight:700; }
+    .calc-val.saving { color:var(--success); }
+    .calc-val.cost { color:var(--accent); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Finance · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, leversOpened=0, LEVER_TOTAL=5, quizAnswered=false;
+
+function openLever(id){
+  var el=document.getElementById('lever-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); leversOpened++;
+  if(leversOpened>=LEVER_TOTAL) document.getElementById('lever-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🤝 EDP Negotiation</div>
+        <h2>The Enterprise Discount Program: AWS's most powerful lever for large spenders</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Once a company spends above ~$1M/year on AWS, an Enterprise Discount Program (EDP) becomes available. An EDP is a private pricing agreement: you commit to a minimum annual spend over 1–5 years, and AWS provides a percentage discount applied on top of all other pricing (including Savings Plans). At scale, this can save millions annually — but the negotiation levers are non-obvious.</p>
+        <div class="scenario-box">
+          <strong>Your position entering negotiation:</strong><br>
+          — Current AWS spend: $3.6M/year ($300K/month)<br>
+          — Projected year 3: $7.2M/year (growing 40% YoY)<br>
+          — Existing commitments: $800K Savings Plans in place<br>
+          — AWS account team relationship: 18 months<br>
+          — Renewal cycle: no current EDP — this is a first negotiation<br><br>
+          AWS is proposing: 3-year EDP, $4M/year commitment, 8% discount. Your job: understand what's on the table and which levers to pull.
+        </div>
+        <div class="step-actions">
+          <a href="finance.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">Understand the levers →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    leversOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🤝 Negotiation Levers</div>
+        <h2>Five levers that change the EDP outcome — click each</h2>
+        <div class="edp-lever-cards">
+          <div class="lever-card" id="lever-0" onclick="openLever(0)">
+            <div class="lc-head"><span class="lc-icon">📅</span><span class="lc-title">Commitment term: 1-year vs. 3-year vs. 5-year</span><span class="lc-impact high">HIGH IMPACT</span></div>
+            <div class="lc-body">The longer the commitment, the higher the discount. AWS's typical discount curve:<br>
+            1-year: 5–8% · 3-year: 10–14% · 5-year: 15–20%<br><br>
+            Caution: a 5-year commitment at $4M/year = $20M locked in. If your architecture shifts (e.g., from AWS to multi-cloud, or significant workload reduction), you're committed to the minimum spend regardless. Most mature companies target <strong>3-year terms</strong> as the balance point between discount and flexibility. Don't commit to more than 80% of your projected growth-case spend — leave headroom for business changes.</div>
+          </div>
+          <div class="lever-card" id="lever-1" onclick="openLever(1)">
+            <div class="lc-head"><span class="lc-icon">💲</span><span class="lc-title">Commitment level: how much to pledge</span><span class="lc-impact high">HIGH IMPACT</span></div>
+            <div class="lc-body">Higher commitment = higher discount. AWS will show you a tiered table. But the trap: committing above your baseline can cost more than it saves.<br><br>
+            Example: commit $5M/year but spend $3.8M. You pay $1.2M for nothing — the commitment shortfall often has no credit. The right anchor: commit at p50 of your projection (50th percentile case), not p90. Use the growth case to negotiate the discount level, but commit at a conservative number. The AWS account team will push for higher commitments — that's their job. Your job is to commit what you're confident you'll spend.</div>
+          </div>
+          <div class="lever-card" id="lever-2" onclick="openLever(2)">
+            <div class="lc-head"><span class="lc-icon">🎯</span><span class="lc-title">Services in scope: what counts toward the commitment</span><span class="lc-impact medium">MEDIUM IMPACT</span></div>
+            <div class="lc-body">EDP discounts typically apply to eligible services — which is most of AWS, but negotiate what's included. Key services to confirm:<br>
+            — EC2, RDS, ElastiCache, Redshift: standard<br>
+            — Marketplace purchases: often excluded by default — push to include if you have Marketplace spend<br>
+            — Support plan costs: often excluded<br>
+            — Data transfer out: often excluded<br><br>
+            Also negotiate whether the EDP discount stacks on top of Savings Plans. At most AWS tiers it does — you get the SP discount first, then the EDP discount applies on top. This is the "double discount" that makes the math work.</div>
+          </div>
+          <div class="lever-card" id="lever-3" onclick="openLever(3)">
+            <div class="lc-head"><span class="lc-icon">🏆</span><span class="lc-title">Credits and concessions: what else is on the table</span><span class="lc-impact medium">MEDIUM IMPACT</span></div>
+            <div class="lc-body">Beyond the discount percentage, EDP negotiations often include:<br>
+            — <strong>Upfront credits</strong>: AWS may offer $50K–$500K in credits on signing to accelerate workload migration or as a signing bonus<br>
+            — <strong>Professional Services credits</strong>: discounted or free AWS PS engagements to help with migration or optimisation<br>
+            — <strong>Training credits</strong>: AWS training/certification credits for your engineering team<br>
+            — <strong>Technical Account Manager upgrade</strong>: Enterprise Support tier (0.1% of spend) instead of Business Support<br><br>
+            Credits are often easier for AWS to give than a higher discount % (credits are recognised differently on their P&L). If the discount negotiation stalls, pivot to credits.</div>
+          </div>
+          <div class="lever-card" id="lever-4" onclick="openLever(4)">
+            <div class="lc-head"><span class="lc-icon">⚡</span><span class="lc-title">Competitive leverage: multi-cloud and timing</span><span class="lc-impact high">HIGH IMPACT</span></div>
+            <div class="lc-body">AWS will negotiate harder when they have competitive risk. Two sources of leverage:<br><br>
+            <strong>Competitive:</strong> If you have any workloads that could go to Azure or GCP, mention it. Even a 10% migration creates leverage. "We're evaluating a hybrid strategy" can move a discount from 8% to 12% without any actual migration.<br><br>
+            <strong>Timing:</strong> AWS has quarterly revenue targets. Negotiations that close in the last 3 weeks of a quarter — particularly Q4 (October–December) — often get better terms because the AWS account team has margin to work with. This is not a myth. Plan your timeline accordingly. Starting negotiations in month 2 of a quarter and closing in month 3 is the standard playbook.</div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Open all 5 levers to continue</span>
+          <button class="btn btn-primary" id="lever-next" onclick="nextStep()" disabled>Model the deal →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===2){
+    quizAnswered=false;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type quiz">🧠 Quiz — 170 pts</div>
+        <h2>AWS offers you a 3-year EDP at $4M/year commitment for a 10% discount. Your current spend is $3.6M/year growing 40% YoY. You have $800K/year in Savings Plans already. What's the right counter-offer structure?</h2>
+        <div class="edp-calc">
+          <div class="calc-row"><span>Year 1 projection (40% growth)</span><span class="calc-val cost">$5.0M</span></div>
+          <div class="calc-row"><span>Year 2 projection</span><span class="calc-val cost">$7.0M</span></div>
+          <div class="calc-row"><span>Year 3 projection</span><span class="calc-val cost">$9.8M</span></div>
+          <div class="calc-row"><span>3-year total (projected)</span><span class="calc-val cost">$21.8M</span></div>
+          <div class="calc-row"><span>AWS proposal: commit $4M/yr × 3 = $12M over 3 yrs</span><span></span></div>
+          <div class="calc-row total"><span>Gap: committing well below projection</span><span class="calc-val saving">leverage to demand more</span></div>
+        </div>
+        <div class="quiz-opts">
+          <button class="q-opt" onclick="answerQ(0,false,0,2)">A: Accept $4M/year at 10% — it's a conservative commitment and a fair discount</button>
+          <button class="q-opt" onclick="answerQ(1,false,0,2)">B: Commit $7M/year to get a higher discount — your Year 2 projection supports it</button>
+          <button class="q-opt" onclick="answerQ(2,true,170,2)">C: Counter: commit $5M/year (Year 1 projection — confident floor) and leverage the total 3-year projection ($21.8M) to negotiate 13–15% discount. The large delta between commitment and projected spend is your negotiating anchor.</button>
+          <button class="q-opt" onclick="answerQ(3,false,0,2)">D: Accept the 10% but push to shorten to 1-year to maintain flexibility</button>
+        </div>
+        <div id="q-fb" style="display:none" class="tip-card">
+          ✅ <strong>Use the projection delta as your negotiation anchor.</strong> AWS knows your growth trajectory from your account data. The gap between a $4M/year commitment and your $21.8M 3-year projection is enormous — AWS is leaving revenue certainty on the table. Your counter: "We'll commit $5M/year, which we're confident we'll hit. But the 3-year total you're getting is $21.8M based on current trajectory. For that visibility, we need 13–14%." The higher commitment ($5M vs $4M/year = $3M more over 3 years) justifies asking for a higher discount rate. Option B ($7M/year) over-commits and creates shortfall risk. Option D (1 year) sacrifices discount for flexibility — reasonable only if you genuinely expect architectural changes.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" id="q-next" onclick="nextStep()" disabled>Results →</button></div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=140?'🏆':score>=70?'🎯':'📚'}</div>
+        <h2>${score>=140?'Deal closer!':score>=70?'Good instincts!':'Keep building!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/170</span></div>
+        <p>An EDP negotiation is a $10M+ conversation. The difference between 10% and 14% on $7M/year is $280,000 annually — more than the cost of a FinOps headcount dedicated to running it.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Commit conservatively (p50 of projection), negotiate aggressively using the growth trajectory. You want the discount level that reflects your total opportunity, not your minimum spend.</li>
+          <li>The "double discount" — EDP stacks on top of Savings Plans — is the key math. Confirm this explicitly; some EDP structures exclude SP-covered hours from the EDP discount calculation.</li>
+          <li>Credits are often easier for AWS to give than discount percentage. If the discount negotiation stalls, pivot to upfront credits, PS credits, or training credits.</li>
+          <li>Quarter-end timing (especially Q4) moves deals. AWS account teams have flexibility in the last 3 weeks of each quarter. Plan to close, not open, at quarter-end.</li>
+          <li>Competitive leverage is real. You don't need to actually migrate to Azure — you need AWS to believe you're evaluating it. Even a legitimate multi-cloud PoC creates pricing pressure.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="finance.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>

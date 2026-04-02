@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architect Module 7: Database Selection by Cost — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .db-matrix { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
+    @media(max-width:540px){ .db-matrix{ grid-template-columns:repeat(2,1fr); } }
+    .db-col { background:var(--surface2); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .db-col-head { padding:10px 12px; font-weight:800; font-size:0.82rem; border-bottom:1px solid var(--border); text-align:center; }
+    .db-col-head.rds { background:rgba(108,71,255,0.12); }
+    .db-col-head.aurora { background:rgba(255,107,53,0.12); }
+    .db-col-head.dynamo { background:rgba(34,197,94,0.12); }
+    .db-col-head.redshift { background:rgba(245,158,11,0.12); }
+    .db-row { padding:8px 10px; border-bottom:1px solid var(--border); font-size:0.73rem; line-height:1.5; }
+    .db-row:last-child { border-bottom:none; }
+    .db-row strong { display:block; color:var(--text-muted); font-size:0.65rem; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:1px; }
+
+    .workload-cards { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .wl-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:12px 16px; }
+    .wl-card-title { font-weight:700; font-size:0.88rem; margin-bottom:8px; }
+    .db-options { display:flex; gap:6px; flex-wrap:wrap; }
+    .db-btn { padding:6px 12px; border-radius:8px; border:2px solid var(--border); background:transparent; cursor:pointer; font-size:0.78rem; font-weight:600; transition:all 0.15s; }
+    .db-btn:hover:not(:disabled){ border-color:var(--primary); }
+    .db-btn:disabled{ cursor:default; }
+    .db-btn.correct{ border-color:var(--success); background:rgba(34,197,94,0.1); color:var(--success); }
+    .db-btn.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+    .wl-fb { display:none; margin-top:8px; font-size:0.79rem; color:var(--text-muted); line-height:1.55; padding:8px 10px; background:rgba(34,197,94,0.05); border-radius:8px; border:1px solid rgba(34,197,94,0.2); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Architect · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, wlAnswered=[false,false,false,false], quizAnswered=false;
+var WL_PTS=[40,40,40,40];
+var WL_CORRECT=[1,2,3,0]; // Aurora, DynamoDB, Redshift, RDS
+var WL_LABELS=['RDS','Aurora','DynamoDB','Redshift'];
+var WL_EXPLAIN=[
+  'RDS PostgreSQL (db.t3.medium ~$50/mo) is cost-optimal for low-volume transactional workloads with complex queries. Aurora adds 20% storage premium and higher base instance cost — overkill for 500 users. DynamoDB would require redesigning relational queries. Redshift is an analytics warehouse, not suitable for OLTP.',
+  'Aurora Serverless v2 is optimal: scales from 0.5 to 16 ACUs (Aurora Capacity Units), billed per second. Unpredictable SaaS workloads that burst during business hours and idle overnight can see 60–70% cost savings vs. a fixed RDS instance. If you provisioned a fixed db.r5.2xlarge for peak, you\'d pay $900+/month regardless of utilisation.',
+  'DynamoDB on-demand is the correct fit: key-value access patterns with known PK, 10M events/day at bursty timing, no complex queries. On-demand: ~$1.25/million writes + $0.25/million reads. At 10M writes/day = ~$375/month. A relational DB would need over-provisioned IOPS to handle the write burst — 5–10× more expensive. Redshift is batch analytics, not real-time event writes.',
+  'Redshift with Reserved Instances (1-year, $0.25/node/hr) for the steady query fleet. 500 GB of historical data queried daily by analysts is exactly the Redshift use case — columnar storage, MPP queries, cost-effective at that scale. DynamoDB doesn\'t support ad-hoc SQL analytics. Aurora would handle the data volume but columnar analytics performance would be poor and expensive. RDS would be severely under-powered.'
+];
+
+function answerWL(wlIdx, chosen){
+  if(wlAnswered[wlIdx])return;
+  wlAnswered[wlIdx]=true;
+  var correct=(chosen===WL_CORRECT[wlIdx]);
+  if(correct) score+=WL_PTS[wlIdx];
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  var btns=document.querySelectorAll('#wl-'+wlIdx+' .db-btn');
+  btns.forEach(function(b,i){
+    b.disabled=true;
+    if(i===WL_CORRECT[wlIdx]) b.classList.add('correct');
+    else if(i===chosen&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('wl-fb-'+wlIdx).style.display='block';
+  var allDone=wlAnswered.every(function(v){return v;});
+  if(allDone) document.getElementById('wl-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🗄️ Database Economics</div>
+        <h2>"Just use Postgres" is not a database strategy — it's a habit</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Database choice is one of the highest-leverage cost decisions in cloud architecture. The wrong choice at 1M users is survivable. At 100M events/day it becomes your biggest line item. The cost breakpoints between RDS, Aurora, DynamoDB, and Redshift are non-obvious and depend on access patterns, not just data volume.</p>
+        <div class="scenario-box">
+          <strong>The four contenders and their cost models:</strong><br>
+          — <strong>RDS</strong>: Instance + storage + IOPS. Fixed cost, predictable. Best for relational OLTP with stable load.<br>
+          — <strong>Aurora</strong>: Instance + $0.10/GB storage + $0.20/million I/Os. 20% storage premium over RDS. Serverless v2 available for variable load.<br>
+          — <strong>DynamoDB</strong>: $1.25/million WRUs + $0.25/million RRUs (on-demand) or provisioned + Reserved Capacity (up to 77% off). Best for key-value, high-throughput, unpredictable bursts.<br>
+          — <strong>Redshift</strong>: Node-hours. Dense compute (dc2.large: $0.25/hr on-demand, $0.182/hr 1-yr RI). Best for columnar analytics on large datasets.
+        </div>
+        <div class="step-actions">
+          <a href="architect.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the comparison →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🗄️ Cost Matrix</div>
+        <h2>When each database wins on cost</h2>
+        <div class="db-matrix">
+          <div class="db-col">
+            <div class="db-col-head rds">RDS</div>
+            <div class="db-row"><strong>Sweet spot</strong>Low–medium OLTP, complex SQL, &lt;10K TPS</div>
+            <div class="db-row"><strong>Cost model</strong>Fixed instance + gp3 storage. Predictable.</div>
+            <div class="db-row"><strong>Breaks down at</strong>High write TPS (IOPS limits), unpredictable load (pay for peak)</div>
+            <div class="db-row"><strong>Reserved RI</strong>Up to 40% off 1-yr, 60% off 3-yr</div>
+          </div>
+          <div class="db-col">
+            <div class="db-col-head aurora">Aurora</div>
+            <div class="db-row"><strong>Sweet spot</strong>Variable load OLTP, multi-AZ reads, Serverless v2</div>
+            <div class="db-row"><strong>Cost model</strong>Instance or ACU/sec + $0.10/GB + I/O charges</div>
+            <div class="db-row"><strong>Breaks down at</strong>High I/O workloads — per-I/O charges add up fast vs. RDS gp3</div>
+            <div class="db-row"><strong>vs RDS</strong>20–40% more storage cost; wins on read scaling + Serverless</div>
+          </div>
+          <div class="db-col">
+            <div class="db-col-head dynamo">DynamoDB</div>
+            <div class="db-row"><strong>Sweet spot</strong>Key-value, high write throughput, bursty, global scale</div>
+            <div class="db-row"><strong>Cost model</strong>Per-request (on-demand) or provisioned + Reserved</div>
+            <div class="db-row"><strong>Breaks down at</strong>Complex queries (Scan = full table cost), large item sizes, reporting</div>
+            <div class="db-row"><strong>Reserved</strong>1-yr reserved WCU: 77% off provisioned rate</div>
+          </div>
+          <div class="db-col">
+            <div class="db-col-head redshift">Redshift</div>
+            <div class="db-row"><strong>Sweet spot</strong>Columnar analytics, 100GB–multi-PB, batch reporting</div>
+            <div class="db-row"><strong>Cost model</strong>Node-hours. Dense compute or RA3 (managed storage)</div>
+            <div class="db-row"><strong>Breaks down at</strong>Frequent small queries (node is always running), real-time inserts</div>
+            <div class="db-row"><strong>RA3 advantage</strong>Storage separate from compute — scale independently</div>
+          </div>
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Match workloads →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    wlAnswered=[false,false,false,false];
+    var workloads=[
+      { title:'500-user B2B SaaS app — relational data, 200 queries/minute, consistent load, standard reporting', desc:'Monthly budget: &lt;$100 on DB' },
+      { title:'SaaS scheduling product — 50 customers, usage spikes 9am–5pm weekdays, near-zero at night and weekends', desc:'Need to handle 5K TPS at peak; 50 TPS off-peak' },
+      { title:'IoT event ingestion — 10 million sensor events per day, simple key-value writes, TTL-based expiry, no complex queries', desc:'Must handle burst write periods' },
+      { title:'Business intelligence platform — 500 GB historical transaction data, 20 analysts running ad-hoc SQL daily', desc:'Batch queries, no real-time requirements' }
+    ];
+    var html='<div class="step-card"><div class="step-type challenge">🗄️ Workload Matching — 160 pts total</div><h2>Match each workload to its cost-optimal database — all 4 to continue</h2><div class="workload-cards">';
+    workloads.forEach(function(w,i){
+      html+='<div class="wl-card" id="wl-'+i+'"><div class="wl-card-title">'+w.title+'</div><div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">'+w.desc+'</div><div class="db-options">';
+      WL_LABELS.forEach(function(l,j){
+        html+='<button class="db-btn" onclick="answerWL('+i+','+j+')">'+l+'</button>';
+      });
+      html+='</div><div class="wl-fb" id="wl-fb-'+i+'">'+WL_EXPLAIN[i]+'</div></div>';
+    });
+    html+='</div><div class="step-actions"><span style="font-size:0.8rem;color:var(--text-muted)">Answer all 4 to continue</span><button class="btn btn-primary" id="wl-next" onclick="nextStep()" disabled>Final quiz →</button></div></div>';
+    c.innerHTML=html;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">${score>=180?'🏆':score>=100?'🎯':'📚'}</div>
+        <h2>${score>=180?'Database architect!':score>=100?'Good pattern matching!':'Worth reviewing!'}</h2>
+        <div class="results-score">${score}<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>The right database choice at architecture time prevents a painful migration at scale. The cost signals are in the access patterns — not the data volume.</p>
+        <div class="xp-gained">🏆 +${score} XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>Access pattern first, database second. Key-value with burst → DynamoDB. Complex SQL with stable load → RDS. Variable OLTP → Aurora Serverless. Columnar analytics → Redshift.</li>
+          <li>Aurora's per-I/O pricing ($0.20/million I/Os) can exceed RDS gp3 for read-heavy workloads. Benchmark your I/O rate before choosing Aurora over RDS — the crossover point is roughly 5M I/Os/day.</li>
+          <li>DynamoDB Reserved Capacity is the most underused cost lever in AWS. At 77% off provisioned rates with 1-year commitment, it's the single-best discount in the entire AWS price list for stable workloads.</li>
+          <li>Redshift RA3 nodes separate storage from compute — you pay $0.024/GB/month for storage and scale compute nodes independently. For analytics workloads with large data and intermittent queries, this beats dense compute nodes significantly.</li>
+          <li>The most expensive database is the one you migrate away from at 10M users. Choosing DynamoDB for a relational problem, or RDS for a key-value firehose, costs 10× in rewrite effort plus downtime. Model the access patterns at 100× your current scale before committing.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="architect.html" class="btn btn-primary">Back to track →</a>
+          <a href="arch-module8.html" class="btn btn-ghost">Next module →</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="progress.js"></script>
+</body>
+</html>
