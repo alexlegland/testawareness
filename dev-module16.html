@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Module 16: S3 Request Cost Patterns — FinOps Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .req-table { width:100%; border-collapse:collapse; font-size:0.8rem; margin:10px 0; }
+    .req-table th { background:#17172a; padding:8px 12px; text-align:left; font-size:0.69rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+    .req-table td { padding:8px 12px; border-bottom:1px solid var(--border); }
+    .req-table tr:last-child td { border-bottom:none; }
+    .price-high { color:var(--danger); font-weight:700; }
+    .price-mid  { color:var(--warning); font-weight:700; }
+    .price-low  { color:var(--success); font-weight:700; }
+
+    .workload-cards { display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+    .wc-card { background:var(--surface2); border:2px solid var(--border); border-radius:12px; padding:12px 16px; cursor:pointer; transition:border-color 0.15s; }
+    .wc-card:hover:not(.open){ border-color:var(--warning); }
+    .wc-card.open{ border-color:rgba(245,158,11,0.35); cursor:default; }
+    .wc-title { font-weight:700; font-size:0.88rem; margin-bottom:4px; }
+    .wc-meta { font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; }
+    .wc-hint { font-size:0.7rem; color:var(--primary); font-weight:600; }
+    .wc-card.open .wc-hint { display:none; }
+    .wc-body { display:none; font-size:0.79rem; line-height:1.65; color:var(--text-muted); border-top:1px solid var(--border); padding-top:10px; margin-top:8px; }
+    .wc-card.open .wc-body { display:block; }
+
+    .calc-box { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin:10px 0; font-size:0.82rem; }
+    .calc-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); }
+    .calc-row:last-child { border-bottom:none; font-weight:800; }
+    .cv { font-weight:700; }
+    .cv.bad { color:var(--danger); }
+    .cv.good { color:var(--success); }
+
+    .quiz-opts { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+    .q-opt { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 16px; cursor:pointer; font-size:0.88rem; transition:all 0.15s; text-align:left; }
+    .q-opt:hover:not(:disabled){ border-color:var(--primary); }
+    .q-opt:disabled{ cursor:default; }
+    .q-opt.correct{ border-color:var(--success); background:rgba(34,197,94,0.08); color:var(--success); font-weight:600; }
+    .q-opt.wrong  { border-color:var(--danger);  background:rgba(239,68,68,0.08); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="index.html"><span class="logo-icon">💸</span>FinOps Academy</a>
+  <span class="nav-badge">Developer · Advanced</span>
+</nav>
+<main class="training-page">
+  <div class="progress-header">
+    <div class="progress-info">
+      <span class="step-label" id="step-label">Step 1 of 4</span>
+      <span id="score-display">Score: 0 pts</span>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+  </div>
+  <div id="step-container"></div>
+</main>
+<script>
+var currentStep=0, score=0, wcOpened=0, WC_TOTAL=3, quizAnswered=false;
+
+function openWC(id){
+  var el=document.getElementById('wc-'+id);
+  if(!el||el.classList.contains('open'))return;
+  el.classList.add('open'); wcOpened++;
+  if(wcOpened>=WC_TOTAL) document.getElementById('wc-next').disabled=false;
+}
+function answerQ(idx,correct,pts,ci){
+  if(quizAnswered)return; quizAnswered=true;
+  if(correct) score+=pts;
+  document.getElementById('score-display').textContent='Score: '+score+' pts';
+  document.querySelectorAll('.q-opt').forEach(function(b,i){
+    b.disabled=true;
+    if(i===ci) b.classList.add('correct');
+    else if(i===idx&&!correct) b.classList.add('wrong');
+  });
+  document.getElementById('q-fb').style.display='block';
+  document.getElementById('q-next').disabled=false;
+}
+function nextStep(){ currentStep++; renderStep(); }
+
+function renderStep(){
+  var total=4;
+  document.getElementById('progress-bar').style.width=Math.round((currentStep/total)*100)+'%';
+  document.getElementById('step-label').textContent='Step '+(currentStep+1)+' of '+total;
+  var c=document.getElementById('step-container');
+
+  if(currentStep===0){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type tip">🪣 S3 Request Costs</div>
+        <h2>S3 storage is $0.023/GB. S3 <em>requests</em> can cost more than the storage.</h2>
+        <p style="color:var(--text-muted);margin-bottom:16px">Most developers think of S3 as a storage cost — you pay for the gigabytes. That's true for large files stored infrequently. But for workloads that access S3 at high frequency — thumbnails, config files, feature flags, small JSON objects — the <strong>request charges</strong> dominate the bill. The surprise: LIST operations cost 10× more per request than GET, and every call to list a folder counts.</p>
+        <div class="scenario-box">
+          <strong>Real scenario:</strong><br>
+          — SaaS app generates per-user config files stored in S3 (one file per user)<br>
+          — Each API request loads the config: <code>s3.getObject('configs/user-{id}.json')</code><br>
+          — 50,000 active users, average 40 API calls/day each<br>
+          — Monthly S3 GETs: 50,000 × 40 × 30 = <strong>60 million requests/month</strong><br>
+          — Storage cost: 50,000 files × 2 KB avg = 100 MB = <strong>$0.002/month</strong><br>
+          — Request cost: 60M × $0.0004/1K = <strong>$24/month</strong><br><br>
+          The requests cost 12,000× more than the storage. And this team was also listing the prefix on every request "to check if the file exists."
+        </div>
+        <div class="step-actions">
+          <a href="developer.html" class="btn btn-ghost">← Back to track</a>
+          <button class="btn btn-primary" onclick="nextStep()">See the pricing →</button>
+        </div>
+      </div>`;
+
+  } else if(currentStep===1){
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🪣 Request Pricing Reference</div>
+        <h2>S3 charges per-operation — and the rates are not all equal</h2>
+        <table class="req-table">
+          <thead><tr><th>Operation</th><th>Price per 1,000 requests</th><th>Common trigger</th></tr></thead>
+          <tbody>
+            <tr><td><code>PUT</code>, <code>COPY</code>, <code>POST</code>, <code>LIST</code></td><td class="price-high">$0.005</td><td>Uploads, listing folders, multipart</td></tr>
+            <tr><td><code>GET</code>, <code>SELECT</code>, all others</td><td class="price-mid">$0.0004</td><td>Downloads, presigned URL reads</td></tr>
+            <tr><td><code>DELETE</code></td><td class="price-low">Free</td><td>Object deletion</td></tr>
+            <tr><td>Glacier Instant Retrieval</td><td class="price-high">$0.01 per 1K GETs + $0.03/GB retrieval</td><td>Restoring archived objects</td></tr>
+            <tr><td>Glacier Flexible retrieval fee</td><td class="price-high">$0.10/GB (expedited)</td><td>Retrieving cold archive objects fast</td></tr>
+            <tr><td>S3 Intelligent-Tiering monitoring</td><td class="price-mid">$0.0025 per 1K objects/month</td><td>Any object in Intelligent-Tiering</td></tr>
+          </tbody>
+        </table>
+        <div class="scenario-box" style="margin-top:12px">
+          <strong>⚠️ The LIST trap:</strong> <code>ListObjectsV2</code> costs $0.005/1K requests — 12.5× more expensive than GET. Each API call returns up to 1,000 objects per page. If you're listing a prefix to "check existence" before a GET, you're paying 12.5× the necessary cost for that existence check. Use <code>HeadObject</code> ($0.0004/1K) instead — same result, fraction of the cost.
+        </div>
+        <div class="step-actions"><span></span><button class="btn btn-primary" onclick="nextStep()">Analyse three workloads →</button></div>
+      </div>`;
+
+  } else if(currentStep===2){
+    wcOpened=0;
+    c.innerHTML=`
+      <div class="step-card">
+        <div class="step-type challenge">🪣 Workload Analysis — click each</div>
+        <h2>Three S3 usage patterns — see where costs hide and how to fix them</h2>
+        <div class="workload-cards">
+          <div class="wc-card" id="wc-0" onclick="openWC(0)">
+            <div class="wc-title">Thumbnail service: generate + store + serve per user image upload</div>
+            <div class="wc-meta">100K uploads/day → 3 thumbnail sizes each → 300K PUTs/day + 2M GETs/day (thumbnails served directly from S3)</div>
+            <div class="wc-hint">Click to analyse →</div>
+            <div class="wc-body">
+              <div class="calc-box">
+                <div class="calc-row"><span>300K PUTs/day × 30 = 9M/month @ $0.005/1K</span><span class="cv bad">$45/mo</span></div>
+                <div class="calc-row"><span>2M GETs/day × 30 = 60M/month @ $0.0004/1K</span><span class="cv bad">$24/mo</span></div>
+                <div class="calc-row"><span>Data transfer out to users: 60M × 15KB avg = 900GB × $0.09/GB</span><span class="cv bad">$81/mo</span></div>
+                <div class="calc-row"><span><strong>Total without optimisation</strong></span><span class="cv bad">$150/mo</span></div>
+              </div>
+              <strong>Fix: serve thumbnails via CloudFront</strong><br>
+              GETs from CloudFront origin (S3): only cache misses hit S3. At 95% cache hit rate, S3 GETs drop from 60M to 3M/month = $1.20. CloudFront costs ~$0.085/GB for 900GB = $76.50. But CloudFront to user egress replaces S3 direct egress — similar cost, with the GET reduction saving $22.80/month. Larger win: S3 egress stops entirely (CloudFront handles it), and CDN edge latency improves user experience.
+            </div>
+          </div>
+          <div class="wc-card" id="wc-1" onclick="openWC(1)">
+            <div class="wc-title">Feature flag config loader: Lambda reads per-tenant config on every invocation</div>
+            <div class="wc-meta">200 tenants, 500K Lambda invocations/day, each reads S3 config file</div>
+            <div class="wc-hint">Click to analyse →</div>
+            <div class="wc-body">
+              <div class="calc-box">
+                <div class="calc-row"><span>500K GETs/day × 30 = 15M/month @ $0.0004/1K</span><span class="cv bad">$6/mo</span></div>
+                <div class="calc-row"><span>Unnecessary: also ListObjects on prefix first</span><span class="cv bad">+$75/mo (15M LIST @ $0.005)</span></div>
+                <div class="calc-row"><span><strong>Total</strong></span><span class="cv bad">$81/mo</span></div>
+              </div>
+              <strong>Fix 1: remove the LIST call.</strong> Use <code>GetObject</code> directly and handle <code>NoSuchKey</code> as "config not found." One request, not two.<br><br>
+              <strong>Fix 2: in-process caching.</strong> Config changes rarely. Cache the S3 object in Lambda memory with a 5-minute TTL. 200 tenants × one cache miss per tenant per 5 min = 200 × 288 = 57,600 GETs/day instead of 500K. <strong>Cost: $0.07/month</strong>. Saving: $80.93/month.
+            </div>
+          </div>
+          <div class="wc-card" id="wc-2" onclick="openWC(2)">
+            <div class="wc-title">Log archival: Lambda writes one log line per event as a separate S3 object</div>
+            <div class="wc-meta">5M events/day → 5M S3 PUTs/day, each object is a 200-byte JSON record</div>
+            <div class="wc-hint">Click to analyse →</div>
+            <div class="wc-body">
+              <div class="calc-box">
+                <div class="calc-row"><span>5M PUTs/day × 30 = 150M/month @ $0.005/1K</span><span class="cv bad">$750/mo</span></div>
+                <div class="calc-row"><span>Storage: 150M × 200B = 30GB × $0.023/GB</span><span class="cv bad">$0.69/mo</span></div>
+                <div class="calc-row"><span><strong>Total</strong></span><span class="cv bad">$750.69/mo</span></div>
+              </div>
+              <strong>The request cost is 1,087× the storage cost.</strong><br><br>
+              <strong>Fix: batch writes.</strong> Buffer 1,000 events in Lambda memory (or SQS), then write one S3 object with 1,000 records. PUTs: 150M ÷ 1,000 = 150K/month = <strong>$0.75/month</strong>. Saving: <strong>$749.25/month</strong>.<br><br>
+              Batching pattern: use SQS → Lambda trigger with batch size 1,000. One Lambda invocation processes 1,000 events, writes one S3 object. Alternatively: Kinesis Firehose automatically batches to S3 ($0.029/GB delivered — at 30GB = $0.87/month total).
+            </div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <span style="font-size:0.8rem;color:var(--text-muted)">Review all 3 to continue</span>
+          <button class="btn btn-primary" id="wc-next" onclick="nextStep()" disabled>Quiz →</button>
+        </div>
+      </div>`;
+
+  } else {
+    document.getElementById('progress-bar').style.width='100%';
+    document.getElementById('step-label').textContent='Completed! 🎉';
+    c.innerHTML=`
+      <div class="step-card results-card">
+        <div class="results-badge">🏆</div>
+        <h2>S3-savvy!</h2>
+        <div class="results-score">160<span style="font-size:2rem;color:var(--text-muted)">/160</span></div>
+        <p>S3 request costs reward batch-oriented thinking. Writing 1,000 records in one PUT costs the same as writing one record in one PUT — but 1,000× less per record.</p>
+        <div class="xp-gained">🏆 +160 XP earned</div>
+        <div class="takeaways"><h3>Key Takeaways</h3><ul>
+          <li>LIST ($0.005/1K) costs 12.5× more than GET ($0.0004/1K). Never use ListObjects to check for file existence — use HeadObject instead. Never list to find a known key — construct the path directly.</li>
+          <li>High-frequency small-object writes are the most expensive S3 pattern. One PUT per event at 5M events/day = $750/month. Batching 1,000 events per object = $0.75/month. Same data, 1,000× fewer requests.</li>
+          <li>Cache S3 config reads in process memory with a short TTL (1–5 minutes). Config files change rarely — serving 99%+ of reads from memory reduces both latency and S3 request costs dramatically.</li>
+          <li>S3 Intelligent-Tiering charges a per-object monitoring fee ($0.0025/1K objects/month). For millions of small objects, this monitoring fee can exceed the storage savings from tiering. Only use Intelligent-Tiering for objects &gt;128KB.</li>
+          <li>Glacier retrieval has two costs: per-request + per-GB retrieval fee. Expedited retrieval ($0.10/GB) on 1TB = $100 for a single restore. Design cold archive workflows around bulk/standard retrieval ($0.0025–$0.01/GB) and plan retrieval windows in advance.</li>
+        </ul></div>
+        <div class="results-actions">
+          <a href="developer.html" class="btn btn-primary">Track complete! →</a>
+          <a href="index.html" class="btn btn-ghost">← Home</a>
+        </div>
+      </div>`;
+  }
+}
+renderStep();
+</script>
+</body>
+</html>
